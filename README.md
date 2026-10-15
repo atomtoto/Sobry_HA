@@ -17,7 +17,8 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
   - Average price
 - Exposes full returned price list in `all_prices` attribute of the current price sensor
 - Drives appliances directly from the market price, without writing an automation
-  (see [Appliance control](#appliance-control)), with a fixed-schedule
+  (see [Appliance control](#appliance-control)), with a runtime that can
+  [vary over the year](#a-runtime-that-varies) and a fixed-schedule
   [safety net](#safety-net) when prices cannot be fetched
 
 ## Installation
@@ -54,6 +55,7 @@ needs a helper entity and an automation.
 | Selection mode | How the slots are picked, see below |
 | Entity to control | Optional. `switch`, `input_boolean`, `light`, `climate`, `water_heater`, `humidifier` or `fan` |
 | Runtime | Hours to schedule per window, for example `8` |
+| Entity giving the runtime | Optional. An `input_number`, `number` or sensor holding the hours to schedule. See [A runtime that varies](#a-runtime-that-varies) |
 | Extra runtime after the cheap slots | Optional. Keeps running that long after the last selected slot, whatever the price |
 | Window start / end | Daily window the slots are picked in. Same start and end means a full day |
 | Maximum price | Optional cap: a slot above it is never selected, even if hours are missing |
@@ -79,6 +81,34 @@ more hour, to be sure it finished heating. The extension applies once per
 window, after the last selected slot, and holds even when the price series
 stops before its end.
 
+### A runtime that varies
+
+A water heater needs fewer hours in July than in January. Two ways to follow
+that, both optional:
+
+**Per month** — **Configure** → **Runtime per month**, pick the appliance, and
+fill in the months that differ. A month left empty uses the runtime configured
+on the appliance, so filling in November to March is enough. A month set to `0`
+keeps the appliance off for that month — a pool pump over winter, for instance.
+
+**From an entity** — point *Entity giving the runtime* at an `input_number` you
+set from a dashboard, or at any `number` or sensor whose value is a number of
+hours. That covers everything a month cannot: a template sensor on the outdoor
+temperature, on `sensor.season`, on the day of the week, on who is home. The
+plan follows the entity as it changes, without waiting for the next price
+refresh, and clamps the value to 0–24 h.
+
+The runtime is resolved in that order: the entity if it holds a usable number,
+then the month, then the runtime configured on the appliance. An entity that is
+missing, unavailable or not numeric is logged once and the next source takes
+over, so a broken template never leaves the appliance without a schedule.
+
+While the runtime comes from a month or an entity, the tunable
+`number.<name>_runtime` is replaced by the read-only `sensor.<name>_runtime`:
+the value has a single source of truth, and the `hours_source` attribute of the
+binary sensor says which one is in charge (`entity`, `month`, `default`, or
+`manual` when you set it by hand).
+
 ### Entities created per appliance
 
 | Entity | Role |
@@ -87,7 +117,7 @@ stops before its end.
 | `sensor.<name>_next_start` | Start of the next planned run |
 | `sensor.<name>_next_end` | End of the running window, or of the next one |
 | `sensor.<name>_planned_average_price` | Average price of the selected slots |
-| `number.<name>_runtime` | Hours to schedule, tunable from a dashboard |
+| `number.<name>_runtime` | Hours to schedule, tunable from a dashboard. Replaced by `sensor.<name>_runtime` when the runtime comes from a month or an entity |
 | `number.<name>_price_threshold` | Threshold, for the threshold mode |
 | `switch.<name>_automatic_control` | Created when an entity is controlled. Turn it off to take over manually; the appliance is left as it is, and the plan resumes when you turn it back on |
 | `binary_sensor.<name>_fixed_schedule_fallback` | Created when a fallback schedule is set. `on` while the fixed schedule is in charge |

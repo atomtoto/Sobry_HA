@@ -28,7 +28,9 @@ async def async_setup_entry(
     for plan in runtime.plans:
         if plan.mode == MODE_THRESHOLD:
             entities.append(SobryPlanThresholdNumber(plan))
-        else:
+        elif not plan.uses_derived_hours:
+            # A runtime driven by a month table or an entity is reported by a
+            # sensor instead, so there is a single source of truth.
             entities.append(SobryPlanHoursNumber(plan))
     async_add_entities(entities)
 

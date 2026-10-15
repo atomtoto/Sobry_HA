@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, tzinfo
 import logging
 from typing import Any
 
@@ -14,8 +14,10 @@ from homeassistant.const import (
     CONF_NAME,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import dt as dt_util
@@ -25,6 +27,8 @@ from .const import (
     CONF_FALLBACK_END,
     CONF_FALLBACK_START,
     CONF_HOURS,
+    CONF_HOURS_BY_MONTH,
+    CONF_HOURS_ENTITY,
     CONF_MAX_PRICE,
     CONF_MODE,
     CONF_PLAN_ID,
@@ -41,6 +45,11 @@ from .const import (
     DEFAULT_WINDOW_END,
     DEFAULT_WINDOW_START,
     DOMAIN,
+    HOURS_SOURCE_DEFAULT,
+    HOURS_SOURCE_ENTITY,
+    HOURS_SOURCE_MANUAL,
+    HOURS_SOURCE_MONTH,
+    MAX_HOURS,
     MODE_CHEAPEST_SLOTS,
     MODE_THRESHOLD,
     NAME,
@@ -72,6 +81,23 @@ def optional_time(value: Any) -> time | None:
     if value in (None, ""):
         return None
     return dt_util.parse_time(str(value))
+
+
+def month_hours(value: Any) -> dict[int, float]:
+    """Parse the per month runtime table stored in the options."""
+    if not isinstance(value, dict):
+        return {}
+    parsed: dict[int, float] = {}
+    for month, hours in value.items():
+        try:
+            key = int(month)
+        except (TypeError, ValueError):
+            continue
+        amount = _as_float(hours)
+        if amount is None or not 1 <= key <= 12:
+            continue
+        parsed[key] = amount
+    return parsed
 
 
 def _as_float(value: Any, default: float | None = None) -> float | None:
@@ -106,6 +132,10 @@ class SobryPlan:
         self.window_start = parse_time(config.get(CONF_WINDOW_START), DEFAULT_WINDOW_START)
         self.window_end = parse_time(config.get(CONF_WINDOW_END), DEFAULT_WINDOW_END)
         self.max_price = _as_float(config.get(CONF_MAX_PRICE))
+        # Runtime sources, in order of precedence: an entity, the month of the
+        # period, then the runtime configured on the plan.
+        self.hours_entity: str | None = config.get(CONF_HOURS_ENTITY) or None
+        self.hours_by_month = month_hours(config.get(CONF_HOURS_BY_MONTH))
         self.extra_hours = (
             _as_float(config.get(CONF_EXTRA_HOURS), DEFAULT_EXTRA_HOURS) or 0.0
         )
@@ -129,6 +159,8 @@ class SobryPlan:
         self._applied_state: bool | None = None
         self._last_control_error: str | None = None
         self._active: bool | None = None
+        self._hours_source = HOURS_SOURCE_MANUAL
+        self._last_hours_error: str | None = None
         self._fallback_active = False
         self._fallback_window: tuple[datetime, datetime] | None = None
         self._listeners: list[Callable[[], None]] = []
@@ -158,6 +190,16 @@ class SobryPlan:
     def hours(self) -> float:
         """Return the daily runtime the plan schedules."""
         return self._hours
+
+    @property
+    def uses_derived_hours(self) -> bool:
+        """Return whether the runtime comes from a source, not from the UI."""
+        return bool(self.hours_entity or self.hours_by_month)
+
+    @property
+    def hours_source(self) -> str:
+        """Return where the current runtime comes from."""
+        return self._hours_source
 
     @property
     def threshold_price(self) -> float | None:
@@ -261,6 +303,9 @@ class SobryPlan:
         timezone = local_timezone()
         slots = self.coordinator.price_slots
 
+        if self.uses_derived_hours:
+            self._hours, self._hours_source = self._resolve_hours(moment, timezone)
+
         self.result = (
             build_plan(
                 slots,
@@ -294,6 +339,52 @@ class SobryPlan:
             self._active = None
         else:
             self._active = self.result.is_active(moment)
+
+    def _resolve_hours(self, moment: datetime, zone: tzinfo) -> tuple[float, str]:
+        """Return the runtime to schedule, and where it comes from."""
+        if self.hours_entity:
+            hours = self._entity_hours(self.hours_entity)
+            if hours is not None:
+                return hours, HOURS_SOURCE_ENTITY
+
+        if self.hours_by_month:
+            # The month of the window the plan is about, not of the current
+            # instant: an overnight window belongs to the day it starts.
+            period_start, _period_end = period_bounds(
+                moment, self.window_start, self.window_end, zone
+            )
+            month = period_start.astimezone(zone).month
+            if month in self.hours_by_month:
+                return self.hours_by_month[month], HOURS_SOURCE_MONTH
+
+        return self.configured_hours, HOURS_SOURCE_DEFAULT
+
+    def _entity_hours(self, entity_id: str) -> float | None:
+        """Return the runtime published by another entity, if it is usable."""
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            self._warn_unusable_hours(f"{entity_id} does not exist")
+            return None
+        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            self._warn_unusable_hours(f"{entity_id} is {state.state}")
+            return None
+        hours = _as_float(state.state)
+        if hours is None:
+            self._warn_unusable_hours(f"{entity_id} is not a number: {state.state}")
+            return None
+        self._last_hours_error = None
+        return min(max(hours, 0.0), MAX_HOURS)
+
+    def _warn_unusable_hours(self, message: str) -> None:
+        """Warn once about an unusable runtime source, before falling back."""
+        if message == self._last_hours_error:
+            return
+        _LOGGER.warning(
+            "Sobry plan %s cannot read its runtime: %s, falling back",
+            self.name,
+            message,
+        )
+        self._last_hours_error = message
 
     def _is_blind(self, moment: datetime) -> bool:
         """Return True when the plan has no usable schedule for right now.
@@ -413,11 +504,14 @@ class SobryPlan:
             "window_start": self.window_start.isoformat(),
             "window_end": self.window_end.isoformat(),
             "requested_hours": round(self._hours, 3),
+            "hours_source": self._hours_source,
             "extra_hours": round(self.extra_hours, 3),
             "fallback_active": self._fallback_active,
             "next_start": next_start.astimezone(tz).isoformat() if next_start else None,
             "next_end": next_end.astimezone(tz).isoformat() if next_end else None,
         }
+        if self.hours_entity:
+            attributes["hours_entity"] = self.hours_entity
         if self.has_fallback and self.fallback_start and self.fallback_end:
             attributes["fallback_start"] = self.fallback_start.isoformat()
             attributes["fallback_end"] = self.fallback_end.isoformat()
@@ -493,6 +587,13 @@ class SobryRuntimeData:
         """Drive every target entity towards its planned state."""
         for plan in self.plans:
             await plan.async_apply_control()
+
+    async def async_handle_hours_entity_change(self, event: Event) -> None:
+        """Replan the plans reading their runtime from the changed entity."""
+        entity_id = event.data["entity_id"]
+        for plan in self.plans:
+            if plan.hours_entity == entity_id:
+                await plan.async_update()
 
     async def async_tick(self, now: datetime) -> None:
         """Re-evaluate every plan, called once a minute."""

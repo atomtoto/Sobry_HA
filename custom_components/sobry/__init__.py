@@ -6,7 +6,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_change,
+)
 
 from .const import CONF_PLAN_ID, DOMAIN
 from .coordinator import SobryDataUpdateCoordinator
@@ -49,6 +52,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator.async_add_listener(runtime.async_handle_coordinator_update)
     )
     entry.async_on_unload(async_track_time_change(hass, runtime.async_tick, second=0))
+
+    # A runtime read from another entity has to be followed as it changes.
+    tracked = sorted({plan.hours_entity for plan in plans if plan.hours_entity})
+    if tracked:
+        entry.async_on_unload(
+            async_track_state_change_event(
+                hass, tracked, runtime.async_handle_hours_entity_change
+            )
+        )
+
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     async_setup_services(hass)

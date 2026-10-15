@@ -11,13 +11,13 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_EURO
+from homeassistant.const import CURRENCY_EURO, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, MODE_THRESHOLD
 from .coordinator import SobryDataUpdateCoordinator
 from .entity import SobryPlanEntity
 from .plan import SobryPlan, SobryRuntimeData
@@ -44,6 +44,8 @@ async def async_setup_entry(
         entities.append(SobryPlanNextStartSensor(plan))
         entities.append(SobryPlanNextEndSensor(plan))
         entities.append(SobryPlanAveragePriceSensor(plan))
+        if plan.mode != MODE_THRESHOLD and plan.uses_derived_hours:
+            entities.append(SobryPlanRuntimeSensor(plan))
 
     async_add_entities(entities)
 
@@ -160,3 +162,27 @@ class SobryPlanAveragePriceSensor(SobryPlanSensor):
         """Return the average price of the planned slots."""
         value = self._plan.average_price
         return None if value is None else round(value, 6)
+
+
+class SobryPlanRuntimeSensor(SobryPlanSensor):
+    """Runtime the plan schedules, when it is not set by hand."""
+
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_translation_key = "plan_runtime"
+
+    def __init__(self, plan: SobryPlan) -> None:
+        """Initialise the runtime sensor."""
+        super().__init__(plan, "runtime")
+
+    @property
+    def native_value(self) -> float:
+        """Return the runtime currently scheduled."""
+        return self._plan.hours
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return where the runtime comes from."""
+        attributes: dict[str, Any] = {"source": self._plan.hours_source}
+        if self._plan.hours_entity:
+            attributes["hours_entity"] = self._plan.hours_entity
+        return attributes

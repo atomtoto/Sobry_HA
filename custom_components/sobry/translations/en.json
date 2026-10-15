@@ -28,6 +28,7 @@
           "settings": "Pricing settings",
           "add_plan": "Add an appliance",
           "edit_plan": "Edit an appliance",
+          "monthly_hours": "Runtime per month",
           "remove_plan": "Remove an appliance"
         }
       },
@@ -51,6 +52,7 @@
           "mode": "Selection mode",
           "target_entity": "Entity to control",
           "hours": "Runtime",
+          "hours_entity": "Entity giving the runtime",
           "extra_hours": "Extra runtime after the cheap slots",
           "window_start": "Window start",
           "window_end": "Window end",
@@ -63,7 +65,8 @@
         "data_description": {
           "name": "Used as the device name, for instance \"Water heater\".",
           "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
-          "hours": "Daily runtime to schedule during the window.",
+          "hours": "Daily runtime to schedule during the window. Used unless a month or an entity provides one.",
+          "hours_entity": "Optional. An input_number, a number or a sensor whose value is a number of hours — a template sensor on the outdoor temperature, the season, the day of the week. It wins over the months and over the runtime above, and replaces the runtime number by a sensor.",
           "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
           "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
@@ -87,6 +90,7 @@
           "mode": "Selection mode",
           "target_entity": "Entity to control",
           "hours": "Runtime",
+          "hours_entity": "Entity giving the runtime",
           "extra_hours": "Extra runtime after the cheap slots",
           "window_start": "Window start",
           "window_end": "Window end",
@@ -99,7 +103,8 @@
         "data_description": {
           "name": "Used as the device name, for instance \"Water heater\".",
           "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
-          "hours": "Daily runtime to schedule during the window.",
+          "hours": "Daily runtime to schedule during the window. Used unless a month or an entity provides one.",
+          "hours_entity": "Optional. An input_number, a number or a sensor whose value is a number of hours — a template sensor on the outdoor temperature, the season, the day of the week. It wins over the months and over the runtime above, and replaces the runtime number by a sensor.",
           "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
           "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
@@ -108,6 +113,30 @@
           "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
           "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
+        }
+      },
+      "monthly_hours": {
+        "title": "Runtime per month",
+        "data": {
+          "plan_id": "Appliance"
+        }
+      },
+      "monthly_hours_values": {
+        "title": "Runtime per month for {name}",
+        "description": "Longer in winter, shorter in summer. Leave a month empty to use the runtime configured on the appliance ({hours} h), and set it to 0 to keep the appliance off for that month.",
+        "data": {
+          "month_1": "January",
+          "month_2": "February",
+          "month_3": "March",
+          "month_4": "April",
+          "month_5": "May",
+          "month_6": "June",
+          "month_7": "July",
+          "month_8": "August",
+          "month_9": "September",
+          "month_10": "October",
+          "month_11": "November",
+          "month_12": "December"
         }
       },
       "remove_plan": {
@@ -145,6 +174,9 @@
       },
       "plan_average_price": {
         "name": "Planned average price"
+      },
+      "plan_runtime": {
+        "name": "Runtime"
       }
     },
     "number": {

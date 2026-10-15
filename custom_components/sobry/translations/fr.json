@@ -28,6 +28,7 @@
           "settings": "Paramètres tarifaires",
           "add_plan": "Ajouter un appareil",
           "edit_plan": "Modifier un appareil",
+          "monthly_hours": "Durée par mois",
           "remove_plan": "Supprimer un appareil"
         }
       },
@@ -51,6 +52,7 @@
           "mode": "Mode de sélection",
           "target_entity": "Entité à piloter",
           "hours": "Durée de fonctionnement",
+          "hours_entity": "Entité fournissant la durée",
           "extra_hours": "Prolongation après les créneaux",
           "window_start": "Début de la plage",
           "window_end": "Fin de la plage",
@@ -63,7 +65,8 @@
         "data_description": {
           "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
           "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
-          "hours": "Durée quotidienne à programmer dans la plage.",
+          "hours": "Durée quotidienne à programmer dans la plage. Utilisée sauf si un mois ou une entité en fournit une.",
+          "hours_entity": "Facultatif. Un input_number, un number ou un capteur dont la valeur est un nombre d'heures : capteur template sur la température extérieure, la saison, le jour de la semaine. Elle a priorité sur les mois et sur la durée ci-dessus, et remplace le number de durée par un capteur.",
           "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
           "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
@@ -87,6 +90,7 @@
           "mode": "Mode de sélection",
           "target_entity": "Entité à piloter",
           "hours": "Durée de fonctionnement",
+          "hours_entity": "Entité fournissant la durée",
           "extra_hours": "Prolongation après les créneaux",
           "window_start": "Début de la plage",
           "window_end": "Fin de la plage",
@@ -99,7 +103,8 @@
         "data_description": {
           "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
           "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
-          "hours": "Durée quotidienne à programmer dans la plage.",
+          "hours": "Durée quotidienne à programmer dans la plage. Utilisée sauf si un mois ou une entité en fournit une.",
+          "hours_entity": "Facultatif. Un input_number, un number ou un capteur dont la valeur est un nombre d'heures : capteur template sur la température extérieure, la saison, le jour de la semaine. Elle a priorité sur les mois et sur la durée ci-dessus, et remplace le number de durée par un capteur.",
           "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
           "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
@@ -108,6 +113,30 @@
           "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
           "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
+        }
+      },
+      "monthly_hours": {
+        "title": "Durée par mois",
+        "data": {
+          "plan_id": "Appareil"
+        }
+      },
+      "monthly_hours_values": {
+        "title": "Durée par mois de {name}",
+        "description": "Plus longue l'hiver, plus courte l'été. Laissez un mois vide pour utiliser la durée configurée sur l'appareil ({hours} h), et mettez 0 pour laisser l'appareil à l'arrêt ce mois-là.",
+        "data": {
+          "month_1": "Janvier",
+          "month_2": "Février",
+          "month_3": "Mars",
+          "month_4": "Avril",
+          "month_5": "Mai",
+          "month_6": "Juin",
+          "month_7": "Juillet",
+          "month_8": "Août",
+          "month_9": "Septembre",
+          "month_10": "Octobre",
+          "month_11": "Novembre",
+          "month_12": "Décembre"
         }
       },
       "remove_plan": {
@@ -145,6 +174,9 @@
       },
       "plan_average_price": {
         "name": "Prix moyen planifié"
+      },
+      "plan_runtime": {
+        "name": "Durée de fonctionnement"
       }
     },
     "number": {

@@ -20,6 +20,8 @@ from .const import (
     CONF_FALLBACK_START,
     CONF_GRANULARITY,
     CONF_HOURS,
+    CONF_HOURS_BY_MONTH,
+    CONF_HOURS_ENTITY,
     CONF_MAX_PRICE,
     CONF_MODE,
     CONF_PLAN_ID,
@@ -108,6 +110,11 @@ def _plan_schema() -> vol.Schema:
                     unit_of_measurement="h",
                 )
             ),
+            vol.Optional(CONF_HOURS_ENTITY): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["input_number", "number", "sensor"]
+                )
+            ),
             vol.Required(CONF_EXTRA_HOURS, default=DEFAULT_EXTRA_HOURS): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0,
@@ -129,6 +136,22 @@ def _plan_schema() -> vol.Schema:
                 CONF_REQUIRE_COMPLETE_DATA, default=DEFAULT_REQUIRE_COMPLETE_DATA
             ): selector.BooleanSelector(),
         }
+    )
+
+
+def _monthly_schema() -> vol.Schema:
+    """Return the schema holding one optional runtime per month."""
+    hours = selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0,
+            max=MAX_HOURS,
+            step=0.25,
+            mode=selector.NumberSelectorMode.BOX,
+            unit_of_measurement="h",
+        )
+    )
+    return vol.Schema(
+        {vol.Optional(f"month_{month}"): hours for month in range(1, 13)}
     )
 
 
@@ -197,7 +220,11 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         return self.async_create_entry(title="", data={**self._entry.options, **changes})
 
     @staticmethod
-    def _clean_plan(user_input: dict[str, Any], plan_id: str) -> dict[str, Any]:
+    def _clean_plan(
+        user_input: dict[str, Any],
+        plan_id: str,
+        previous: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Return a stored plan from the values submitted in the form."""
         plan = {key: value for key, value in user_input.items() if value not in (None, "")}
         plan[CONF_PLAN_ID] = plan_id
@@ -205,7 +232,31 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         plan[CONF_REQUIRE_COMPLETE_DATA] = bool(
             user_input.get(CONF_REQUIRE_COMPLETE_DATA, DEFAULT_REQUIRE_COMPLETE_DATA)
         )
+        # The per month runtimes live in their own step: editing a plan must
+        # not drop them.
+        if previous and previous.get(CONF_HOURS_BY_MONTH):
+            plan[CONF_HOURS_BY_MONTH] = previous[CONF_HOURS_BY_MONTH]
         return plan
+
+    def _plan_by_id(self) -> dict[str, Any] | None:
+        """Return the plan currently being edited."""
+        return next(
+            (plan for plan in self._plans if plan[CONF_PLAN_ID] == self._plan_id), None
+        )
+
+    def _plan_picker(self, step_id: str):
+        """Show the form asking which appliance to act on."""
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_PLAN_ID): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self._plan_options(),
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id=step_id, data_schema=schema)
 
     def _plan_options(self) -> list[dict[str, str]]:
         """Return the plan list as select options."""
@@ -220,7 +271,7 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         """Offer the settings and the plan management."""
         menu_options = ["settings", "add_plan"]
         if self._plans:
-            menu_options.extend(["edit_plan", "remove_plan"])
+            menu_options.extend(["edit_plan", "monthly_hours", "remove_plan"])
         return self.async_show_menu(step_id="init", menu_options=menu_options)
 
     async def async_step_settings(self, user_input=None):
@@ -277,25 +328,12 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             self._plan_id = user_input[CONF_PLAN_ID]
             return await self.async_step_plan_settings()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_PLAN_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=self._plan_options(),
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                )
-            }
-        )
-        return self.async_show_form(step_id="edit_plan", data_schema=schema)
+        return self._plan_picker("edit_plan")
 
     async def async_step_plan_settings(self, user_input=None):
         """Edit the selected plan."""
         plans = self._plans
-        current = next(
-            (plan for plan in plans if plan[CONF_PLAN_ID] == self._plan_id), None
-        )
+        current = self._plan_by_id()
         if current is None:
             return await self.async_step_init()
 
@@ -304,7 +342,9 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
             if not str(user_input.get(CONF_NAME, "")).strip():
                 errors[CONF_NAME] = "name_required"
             else:
-                updated = self._clean_plan(user_input, current[CONF_PLAN_ID])
+                updated = self._clean_plan(
+                    user_input, current[CONF_PLAN_ID], previous=current
+                )
                 plans = [
                     updated if plan[CONF_PLAN_ID] == current[CONF_PLAN_ID] else plan
                     for plan in plans
@@ -318,6 +358,54 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
             ),
             errors=errors,
             description_placeholders={"name": current.get(CONF_NAME, "")},
+        )
+
+    async def async_step_monthly_hours(self, user_input=None):
+        """Pick the appliance whose runtime varies over the year."""
+        if user_input is not None:
+            self._plan_id = user_input[CONF_PLAN_ID]
+            return await self.async_step_monthly_hours_values()
+        return self._plan_picker("monthly_hours")
+
+    async def async_step_monthly_hours_values(self, user_input=None):
+        """Set a runtime per month, for instance longer in winter."""
+        current = self._plan_by_id()
+        if current is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            months = {
+                str(month): float(user_input[f"month_{month}"])
+                for month in range(1, 13)
+                if user_input.get(f"month_{month}") not in (None, "")
+            }
+            updated = {**current}
+            if months:
+                updated[CONF_HOURS_BY_MONTH] = months
+            else:
+                updated.pop(CONF_HOURS_BY_MONTH, None)
+            plans = [
+                updated if plan[CONF_PLAN_ID] == self._plan_id else plan
+                for plan in self._plans
+            ]
+            return self._save(**{CONF_PLANS: plans})
+
+        stored = current.get(CONF_HOURS_BY_MONTH) or {}
+        suggested = {
+            f"month_{month}": stored[key]
+            for month in range(1, 13)
+            for key in (str(month), month)
+            if key in stored
+        }
+        return self.async_show_form(
+            step_id="monthly_hours_values",
+            data_schema=self.add_suggested_values_to_schema(
+                _monthly_schema(), suggested
+            ),
+            description_placeholders={
+                "name": current.get(CONF_NAME, ""),
+                "hours": str(current.get(CONF_HOURS, DEFAULT_HOURS)),
+            },
         )
 
     async def async_step_remove_plan(self, user_input=None):
