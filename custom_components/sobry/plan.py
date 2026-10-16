@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, time, tzinfo
+from datetime import datetime, time, timedelta, tzinfo
 import logging
 from typing import Any
 
@@ -16,6 +16,7 @@ from homeassistant.const import (
     SERVICE_TURN_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
+    UnitOfPower,
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -31,6 +32,9 @@ from .const import (
     CONF_HOURS_ENTITY,
     CONF_MAX_PRICE,
     CONF_MODE,
+    CONF_POWER_ENTITY,
+    CONF_POWER_HOLD_MAX,
+    CONF_POWER_THRESHOLD,
     CONF_PLAN_ID,
     CONF_PLANS,
     CONF_REQUIRE_COMPLETE_DATA,
@@ -40,6 +44,8 @@ from .const import (
     CONF_WINDOW_START,
     DEFAULT_EXTRA_HOURS,
     DEFAULT_HOURS,
+    DEFAULT_POWER_HOLD_MAX,
+    DEFAULT_POWER_THRESHOLD,
     DEFAULT_REQUIRE_COMPLETE_DATA,
     DEFAULT_THRESHOLD_PRICE,
     DEFAULT_WINDOW_END,
@@ -58,6 +64,10 @@ from .coordinator import SobryDataUpdateCoordinator
 from .planner import PlanResult, PlanWindow, build_plan, period_bounds
 
 _LOGGER = logging.getLogger(__name__)
+
+# A power reading has to stay below the threshold for that long before the
+# appliance is released: a single dip must not cut a heating cycle short.
+POWER_RELEASE_DELAY = timedelta(minutes=2)
 
 
 def local_timezone():
@@ -139,6 +149,14 @@ class SobryPlan:
         self.extra_hours = (
             _as_float(config.get(CONF_EXTRA_HOURS), DEFAULT_EXTRA_HOURS) or 0.0
         )
+        # Hold the appliance on after its window while it still draws power.
+        self.power_entity: str | None = config.get(CONF_POWER_ENTITY) or None
+        self.power_threshold = (
+            _as_float(config.get(CONF_POWER_THRESHOLD), DEFAULT_POWER_THRESHOLD) or 0.0
+        )
+        self.power_hold_max = (
+            _as_float(config.get(CONF_POWER_HOLD_MAX), DEFAULT_POWER_HOLD_MAX) or 0.0
+        )
         # Fixed schedule used whenever the plan cannot decide on its own.
         self.fallback_start = optional_time(config.get(CONF_FALLBACK_START))
         self.fallback_end = optional_time(config.get(CONF_FALLBACK_END))
@@ -163,6 +181,11 @@ class SobryPlan:
         self._last_hours_error: str | None = None
         self._fallback_active = False
         self._fallback_window: tuple[datetime, datetime] | None = None
+        self._holding = False
+        self._hold_deadline: datetime | None = None
+        self._power_below_since: datetime | None = None
+        self._power_now: float | None = None
+        self._last_power_error: str | None = None
         self._listeners: list[Callable[[], None]] = []
 
         self.result: PlanResult | None = None
@@ -224,6 +247,16 @@ class SobryPlan:
             and self.fallback_end is not None
             and self.fallback_start != self.fallback_end
         )
+
+    @property
+    def has_power_hold(self) -> bool:
+        """Return whether the appliance may be held on by its consumption."""
+        return bool(self.power_entity) and self.power_hold_max > 0
+
+    @property
+    def power_hold_active(self) -> bool:
+        """Return whether the appliance is held on by its consumption."""
+        return self._holding
 
     @property
     def fallback_active(self) -> bool:
@@ -339,6 +372,97 @@ class SobryPlan:
             self._active = None
         else:
             self._active = self.result.is_active(moment)
+
+        if self.has_power_hold and self._active is not None:
+            self._active = self._apply_power_hold(moment, self._active)
+
+    def _apply_power_hold(self, moment: datetime, planned: bool) -> bool:
+        """Extend the run past the planned window while power stays high.
+
+        A water heater that still draws power has not finished heating: the
+        plan keeps it on until its consumption drops, and never longer than
+        the configured maximum.
+        """
+        power = self._power_reading()
+
+        if planned:
+            # Running on the plan: arm the hold for the end of the window.
+            self._holding = False
+            self._power_below_since = None
+            self._hold_deadline = self._planned_end(moment) + timedelta(
+                hours=self.power_hold_max
+            )
+            return True
+
+        if self._hold_deadline is None:
+            # The appliance was not running, there is nothing to extend.
+            return False
+
+        if moment >= self._hold_deadline:
+            self._release_hold()
+            return False
+
+        if power is not None and power > self.power_threshold:
+            self._power_below_since = None
+            self._holding = True
+            return True
+
+        # Below the threshold, or unreadable: release once it has lasted.
+        if self._power_below_since is None:
+            self._power_below_since = moment
+        if moment - self._power_below_since >= POWER_RELEASE_DELAY:
+            self._release_hold()
+            return False
+        self._holding = True
+        return True
+
+    def _planned_end(self, moment: datetime) -> datetime:
+        """Return when the appliance is scheduled to stop running."""
+        if self._fallback_window is not None:
+            return self._fallback_window[1]
+        if self.result is not None:
+            window = self.result.current_window(moment)
+            if window is not None:
+                return window.end
+        return moment
+
+    def _release_hold(self) -> None:
+        """Stop holding the appliance on."""
+        self._holding = False
+        self._hold_deadline = None
+        self._power_below_since = None
+
+    def _power_reading(self) -> float | None:
+        """Return the consumption of the power entity, in watts."""
+        if not self.power_entity:
+            return None
+        state = self.hass.states.get(self.power_entity)
+        if state is None:
+            return self._unusable_power(f"{self.power_entity} does not exist")
+        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return self._unusable_power(f"{self.power_entity} is {state.state}")
+        power = _as_float(state.state)
+        if power is None:
+            return self._unusable_power(
+                f"{self.power_entity} is not a number: {state.state}"
+            )
+        if state.attributes.get("unit_of_measurement") == UnitOfPower.KILO_WATT:
+            power *= 1000
+        self._last_power_error = None
+        self._power_now = power
+        return power
+
+    def _unusable_power(self, message: str) -> None:
+        """Warn once about an unusable power entity, then stop holding."""
+        if message != self._last_power_error:
+            _LOGGER.warning(
+                "Sobry plan %s cannot read the consumption of its appliance: %s",
+                self.name,
+                message,
+            )
+            self._last_power_error = message
+        self._power_now = None
+        return None
 
     def _resolve_hours(self, moment: datetime, zone: tzinfo) -> tuple[float, str]:
         """Return the runtime to schedule, and where it comes from."""
@@ -474,6 +598,10 @@ class SobryPlan:
     def next_end(self) -> datetime | None:
         """Return the end of the running window, else of the next one."""
         now = dt_util.utcnow()
+        if self._holding:
+            # The appliance stops when its consumption drops, at the latest
+            # on the deadline.
+            return self._hold_deadline
         if self._fallback_window is not None:
             return self._fallback_window[1]
         if self.result is None:
@@ -512,6 +640,16 @@ class SobryPlan:
         }
         if self.hours_entity:
             attributes["hours_entity"] = self.hours_entity
+        if self.has_power_hold:
+            attributes["power_entity"] = self.power_entity
+            attributes["power_threshold"] = self.power_threshold
+            attributes["power_hold_active"] = self._holding
+            attributes["power_now"] = self._power_now
+            attributes["power_hold_until"] = (
+                self._hold_deadline.astimezone(tz).isoformat()
+                if self._holding and self._hold_deadline
+                else None
+            )
         if self.has_fallback and self.fallback_start and self.fallback_end:
             attributes["fallback_start"] = self.fallback_start.isoformat()
             attributes["fallback_end"] = self.fallback_end.isoformat()

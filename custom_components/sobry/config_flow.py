@@ -25,6 +25,9 @@ from .const import (
     CONF_MAX_PRICE,
     CONF_MODE,
     CONF_PLAN_ID,
+    CONF_POWER_ENTITY,
+    CONF_POWER_HOLD_MAX,
+    CONF_POWER_THRESHOLD,
     CONF_PLANS,
     CONF_PROFIL,
     CONF_REQUIRE_COMPLETE_DATA,
@@ -39,6 +42,8 @@ from .const import (
     DEFAULT_EXTRA_HOURS,
     DEFAULT_GRANULARITY,
     DEFAULT_HOURS,
+    DEFAULT_POWER_HOLD_MAX,
+    DEFAULT_POWER_THRESHOLD,
     DEFAULT_PROFIL,
     DEFAULT_REQUIRE_COMPLETE_DATA,
     DEFAULT_SEGMENT,
@@ -50,6 +55,7 @@ from .const import (
     DOMAIN,
     MAX_EXTRA_HOURS,
     MAX_HOURS,
+    MAX_POWER_THRESHOLD,
     MAX_PRICE_LIMIT,
     MODE_CHEAPEST_SLOTS,
     NAME,
@@ -119,6 +125,33 @@ def _plan_schema() -> vol.Schema:
                 selector.NumberSelectorConfig(
                     min=0,
                     max=MAX_EXTRA_HOURS,
+                    step=0.25,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="h",
+                )
+            ),
+            vol.Optional(CONF_POWER_ENTITY): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["sensor", "input_number", "number"]
+                )
+            ),
+            vol.Required(
+                CONF_POWER_THRESHOLD, default=DEFAULT_POWER_THRESHOLD
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=MAX_POWER_THRESHOLD,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="W",
+                )
+            ),
+            vol.Required(
+                CONF_POWER_HOLD_MAX, default=DEFAULT_POWER_HOLD_MAX
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=MAX_HOURS,
                     step=0.25,
                     mode=selector.NumberSelectorMode.BOX,
                     unit_of_measurement="h",

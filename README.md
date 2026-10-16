@@ -18,8 +18,9 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
 - Exposes full returned price list in `all_prices` attribute of the current price sensor
 - Drives appliances directly from the market price, without writing an automation
   (see [Appliance control](#appliance-control)), with a runtime that can
-  [vary over the year](#a-runtime-that-varies) and a fixed-schedule
-  [safety net](#safety-net) when prices cannot be fetched
+  [vary over the year](#a-runtime-that-varies), a run that can
+  [finish its cycle](#finishing-the-cycle) on the appliance's own consumption,
+  and a fixed-schedule [safety net](#safety-net) when prices cannot be fetched
 
 ## Installation
 
@@ -57,6 +58,9 @@ needs a helper entity and an automation.
 | Runtime | Hours to schedule per window, for example `8` |
 | Entity giving the runtime | Optional. An `input_number`, `number` or sensor holding the hours to schedule. See [A runtime that varies](#a-runtime-that-varies) |
 | Extra runtime after the cheap slots | Optional. Keeps running that long after the last selected slot, whatever the price |
+| Keep running while this entity draws power | Optional. A power sensor of the appliance. See [Finishing the cycle](#finishing-the-cycle) |
+| Power above which the appliance keeps running | Consumption under which the appliance is considered done, in watts |
+| Maximum hold | Caps that extension, whatever the consumption reads |
 | Window start / end | Daily window the slots are picked in. Same start and end means a full day |
 | Maximum price | Optional cap: a slot above it is never selected, even if hours are missing |
 | Price threshold | Used by the threshold mode |
@@ -80,6 +84,29 @@ a water heater with no temperature reading gets its 8 cheap hours plus, say, one
 more hour, to be sure it finished heating. The extension applies once per
 window, after the last selected slot, and holds even when the price series
 stops before its end.
+
+### Finishing the cycle
+
+A water heater that still draws power has not finished heating, and how long it
+needs changes with the incoming water temperature. Point *Keep running while
+this entity draws power* at its power sensor: at the end of a planned window the
+appliance keeps running while that sensor reads above the threshold, and stops
+once it settles below.
+
+- The reading has to stay below the threshold for two minutes before the
+  appliance stops, so a single dip never cuts a heating cycle short. A power
+  entity that is missing, unavailable or not numeric counts as below.
+- *Maximum hold* caps the extension whatever the consumption says — a sensor
+  stuck at 2 kW cannot run the appliance all day. Two hours by default, counted
+  from the end of the planned window.
+- Watts and kilowatts are both understood, from the entity's own unit.
+- The hold applies at the end of every planned window, after any fixed *extra
+  runtime*, and after a fallback window too.
+- Consumption never *starts* anything: the hold only extends a run the plan
+  started, and a Home Assistant restart ends an ongoing hold.
+
+While the hold is on, the binary sensor stays `on` and carries
+`power_hold_active`, `power_now` and `power_hold_until` in its attributes.
 
 ### A runtime that varies
 
@@ -115,7 +142,7 @@ binary sensor says which one is in charge (`entity`, `month`, `default`, or
 | --- | --- |
 | `binary_sensor.<name>` | `on` while the appliance is scheduled to run. Carries the planned slots, the window, the average planned price and the period in its attributes |
 | `sensor.<name>_next_start` | Start of the next planned run |
-| `sensor.<name>_next_end` | End of the running window, or of the next one |
+| `sensor.<name>_next_end` | End of the running window, or of the next one. While the appliance is held by its consumption, the latest moment it can stop |
 | `sensor.<name>_planned_average_price` | Average price of the selected slots |
 | `number.<name>_runtime` | Hours to schedule, tunable from a dashboard. Replaced by `sensor.<name>_runtime` when the runtime comes from a month or an entity |
 | `number.<name>_price_threshold` | Threshold, for the threshold mode |
