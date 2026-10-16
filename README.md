@@ -254,7 +254,8 @@ It runs the planner tests first, refuses to publish when the tag does not match
 the `version` of `custom_components/sobry/manifest.json` (so HACS and Home
 Assistant never disagree on the version), and takes the release body from
 `.github/release-notes/<tag>.md` when that file exists, falling back to
-GitHub's generated notes.
+GitHub's generated notes. A markdown heading on the first line of that file
+becomes the release title.
 
 ## Links
 HACS Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321499/job/101701623660

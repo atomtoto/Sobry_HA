@@ -46,8 +46,20 @@ jobs:
         run: |
           tag="${{ steps.release.outputs.tag }}"
           notes=".github/release-notes/$tag.md"
-          if [ -f "$notes" ]; then
-            gh release create "$tag" --target "${{ github.sha }}" --notes-file "$notes"
-          else
+          if [ ! -f "$notes" ]; then
             gh release create "$tag" --target "${{ github.sha }}" --generate-notes
+            exit 0
           fi
+          # A markdown heading on the first line becomes the release title,
+          # and is left out of the body it titles.
+          case "$(head -1 "$notes")" in
+            '#'*)
+              title="$(head -1 "$notes" | sed 's/^#\+[[:space:]]*//')"
+              tail -n +2 "$notes" | sed '/./,$!d' > "$RUNNER_TEMP/body.md"
+              gh release create "$tag" --target "${{ github.sha }}" \
+                --title "$title" --notes-file "$RUNNER_TEMP/body.md"
+              ;;
+            *)
+              gh release create "$tag" --target "${{ github.sha }}" --notes-file "$notes"
+              ;;
+          esac
