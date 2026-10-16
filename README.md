@@ -242,6 +242,20 @@ The integration also supports v2 parameters internally:
 - `granularity` mapped to `15m` or `1h`
 - `taxMode` (`ttc`/`ht`)
 
+## Releasing
+
+Releases are published by the `Release` workflow, in one of two ways:
+
+- push a tag: `git tag v0.6.0 && git push origin v0.6.0`;
+- or **Actions** → **Release** → *Run workflow*, with the tag as input — the
+  workflow creates the tag on the chosen branch itself.
+
+It runs the planner tests first, refuses to publish when the tag does not match
+the `version` of `custom_components/sobry/manifest.json` (so HACS and Home
+Assistant never disagree on the version), and takes the release body from
+`.github/release-notes/<tag>.md` when that file exists, falling back to
+GitHub's generated notes.
+
 ## Links
 HACS Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321499/job/101701623660
 hassfest Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321473/job/101701623516

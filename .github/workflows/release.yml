@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create and release, for example v0.6.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve the tag
+        id: release
+        run: echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Run the planner tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Check the tag against manifest.json
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          version="$(python -c 'import json; print(json.load(open("custom_components/sobry/manifest.json"))["version"])')"
+          if [ "$tag" != "v$version" ]; then
+            echo "::error::Tag $tag does not match the integration version $version in custom_components/sobry/manifest.json"
+            exit 1
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          notes=".github/release-notes/$tag.md"
+          if [ -f "$notes" ]; then
+            gh release create "$tag" --target "${{ github.sha }}" --notes-file "$notes"
+          else
+            gh release create "$tag" --target "${{ github.sha }}" --generate-notes
+          fi
