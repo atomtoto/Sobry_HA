@@ -6,9 +6,9 @@
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/atomtoto/Sobry_HACS",
+  "documentation": "https://github.com/atomtoto/Sobry_HA",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/atomtoto/Sobry_HACS/issues",
+  "issue_tracker": "https://github.com/atomtoto/Sobry_HA/issues",
   "loggers": [
     "custom_components.sobry"
   ],
