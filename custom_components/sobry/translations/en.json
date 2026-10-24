@@ -13,10 +13,19 @@
           "tax_mode": "Tax mode",
           "api_key": "Sobry API key"
         }
+      },
+      "reauth_confirm": {
+        "title": "Sobry API key refused",
+        "description": "Sobry refused the API key: it was revoked or has expired. Enter a new key, or leave the field empty to use the public prices.",
+        "data": {
+          "api_key": "Sobry API key"
+        }
       }
     },
     "abort": {
-      "already_configured": "Sobry Energy is already configured."
+      "already_configured": "Sobry Energy is already configured.",
+      "reauth_successful": "The API key was updated.",
+      "reauth_failed": "The Sobry entry no longer exists."
     }
   },
   "options": {
@@ -63,6 +72,7 @@
           "fallback_end": "Fallback end",
           "max_price": "Maximum price",
           "threshold_price": "Price threshold",
+          "force_price": "Always run below this price",
           "require_complete_data": "Wait for the whole window to be priced"
         },
         "data_description": {
@@ -78,6 +88,7 @@
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
           "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
           "threshold_price": "Used by the \"below a price threshold\" mode only.",
+          "force_price": "Optional. Whatever the mode, the window, the runtime or the maximum price, the appliance also runs during every slot priced at or below this value. Set 0 to make the most of free and negative prices, leave empty to disable.",
           "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
           "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
@@ -107,6 +118,7 @@
           "fallback_end": "Fallback end",
           "max_price": "Maximum price",
           "threshold_price": "Price threshold",
+          "force_price": "Always run below this price",
           "require_complete_data": "Wait for the whole window to be priced"
         },
         "data_description": {
@@ -122,6 +134,7 @@
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
           "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
           "threshold_price": "Used by the \"below a price threshold\" mode only.",
+          "force_price": "Optional. Whatever the mode, the window, the runtime or the maximum price, the appliance also runs during every slot priced at or below this value. Set 0 to make the most of free and negative prices, leave empty to disable.",
           "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
           "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
@@ -241,6 +254,10 @@
         "threshold_price": {
           "name": "Price threshold",
           "description": "Price under which slots are selected, for the threshold mode."
+        },
+        "force_price": {
+          "name": "Always run below",
+          "description": "Also select every slot priced at or below this value, whatever the window, the runtime or the maximum price."
         },
         "require_complete_data": {
           "name": "Require complete prices",

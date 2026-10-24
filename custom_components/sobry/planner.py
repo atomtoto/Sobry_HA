@@ -41,6 +41,40 @@ def extract_price(item: Any) -> float | None:
         return None
 
 
+def entry_start(item: Any) -> datetime | None:
+    """Return the UTC start of an API entry carrying a ``timestamp``."""
+    if not isinstance(item, dict):
+        return None
+    raw = item.get("timestamp")
+    if not raw:
+        return None
+    try:
+        start = datetime.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    return start.astimezone(timezone.utc)
+
+
+def merge_price_entries(
+    previous: list[Any], latest: list[Any], since: datetime
+) -> list[dict[str, Any]]:
+    """Return ``latest`` completed by the entries of ``previous`` it lacks.
+
+    A refresh after midnight no longer returns the evening before: keeping
+    those prices lets a window that started yesterday still be planned.
+    Entries starting before ``since`` are dropped, ``latest`` wins on a tie.
+    """
+    merged: dict[datetime, dict[str, Any]] = {}
+    for item in [*previous, *latest]:
+        start = entry_start(item)
+        if start is None or start < since:
+            continue
+        merged[start] = item
+    return [merged[start] for start in sorted(merged)]
+
+
 @dataclass(frozen=True)
 class PriceSlot:
     """A single priced time slot."""
@@ -84,8 +118,8 @@ class PlanWindow:
 
     @property
     def hours(self) -> float:
-        """Return the window length in hours."""
-        return (self.end - self.start).total_seconds() / 3600
+        """Return the window length in hours, daylight saving time included."""
+        return (self.end.timestamp() - self.start.timestamp()) / 3600
 
     def contains(self, moment: datetime) -> bool:
         """Return True when ``moment`` falls inside the window."""
@@ -114,6 +148,11 @@ class PlanResult:
     data_complete: bool = False
     candidate_count: int = 0
     reason: str | None = None
+    # ``selected`` and ``windows`` hold every run. The slots run only because
+    # they are priced under the force price, and the windows the plan decided
+    # on its own, are also kept apart.
+    forced: list[PriceSlot] = field(default_factory=list)
+    planned_windows: list[PlanWindow] = field(default_factory=list)
 
     @property
     def selected_hours(self) -> float:
@@ -141,6 +180,16 @@ class PlanResult:
         """Return the running window containing ``moment``, if any."""
         return next((window for window in self.windows if window.contains(moment)), None)
 
+    def planned_window(self, moment: datetime) -> PlanWindow | None:
+        """Return the window the plan decided on containing ``moment``, if any."""
+        return next(
+            (window for window in self.planned_windows if window.contains(moment)), None
+        )
+
+    def is_forced(self, moment: datetime) -> bool:
+        """Return True when ``moment`` falls in a slot run for its price alone."""
+        return any(slot.contains(moment) for slot in self.forced)
+
     def next_window(self, moment: datetime) -> PlanWindow | None:
         """Return the first window starting after ``moment``."""
         return next((window for window in self.windows if window.start > moment), None)
@@ -166,22 +215,20 @@ def build_slots(
     prices: list[Any],
     default_duration: timedelta = DEFAULT_SLOT_DURATION,
 ) -> list[PriceSlot]:
-    """Turn raw API entries into sorted, non overlapping price slots."""
+    """Turn raw API entries into sorted, non overlapping price slots.
+
+    Entries without a price (not published yet) and forecasts (``estimated``)
+    are left out: a plan only relies on published prices.
+    """
     parsed: list[tuple[datetime, float]] = []
     for item in prices:
         price = extract_price(item)
-        if price is None or not isinstance(item, dict):
+        if price is None or item.get("estimated"):
             continue
-        raw = item.get("timestamp")
-        if not raw:
+        start = entry_start(item)
+        if start is None:
             continue
-        try:
-            start = datetime.fromisoformat(raw)
-        except (TypeError, ValueError):
-            continue
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
-        parsed.append((start.astimezone(timezone.utc), price))
+        parsed.append((start, price))
 
     parsed.sort(key=lambda entry: entry[0])
     # Drop duplicated timestamps, keeping the last value seen for a given start.
@@ -315,6 +362,31 @@ def extend_last_window(
         result.windows[-1] = PlanWindow(last.start, extension_end, last.price)
 
 
+def add_forced_slots(
+    result: PlanResult,
+    slots: list[PriceSlot],
+    force_price: float,
+    since: datetime,
+) -> None:
+    """Run the device during every slot priced at or under ``force_price``.
+
+    The forced slots come on top of the plan, whatever its window, runtime or
+    maximum price. They are not extended: a run the price imposes is a bonus,
+    not the run the device needs.
+    """
+    selected = set(result.selected)
+    forced = [
+        slot
+        for slot in slots
+        if slot.end > since and slot.price <= force_price and slot not in selected
+    ]
+    if not forced:
+        return
+    result.forced = forced
+    result.selected = sorted(selected.union(forced), key=lambda slot: slot.start)
+    result.windows = merge_overlapping(result.windows + merge_windows(forced))
+
+
 def _cheapest_slots(candidates: list[PriceSlot], hours: float) -> list[PriceSlot]:
     """Return the cheapest slots adding up to ``hours``, in any order."""
     selected: list[PriceSlot] = []
@@ -394,12 +466,16 @@ def build_plan(
     threshold_price: float | None = None,
     extra_hours: float = 0.0,
     require_complete_data: bool = True,
+    force_price: float | None = None,
 ) -> PlanResult:
     """Plan when a device should run, for the current window occurrence.
 
     When the price series already covers the next occurrence of the window in
     full, that occurrence is planned as well so the entities can advertise the
     next start beyond the end of the current period.
+
+    Every known slot priced at or under ``force_price`` is added on top, from
+    the start of the current period or from now, whichever comes first.
     """
     period_start, period_end = period_bounds(moment, window_start, window_end, tz)
     result = _plan_period(
@@ -434,6 +510,9 @@ def build_plan(
             )
             result.windows = merge_overlapping(result.windows + upcoming.windows)
 
+    result.planned_windows = list(result.windows)
+    if force_price is not None:
+        add_forced_slots(result, slots, force_price, min(period_start, moment))
     return result
 
 
@@ -452,7 +531,12 @@ def _plan_period(
     """Plan a single window occurrence."""
     candidates = [slot for slot in slots if period_start <= slot.start < period_end]
     covered = sum((slot.duration for slot in candidates), timedelta(0))
-    data_complete = covered >= (period_end - period_start) - _TOLERANCE
+    # A period losing an hour to daylight saving time is complete with one
+    # hour less. One gaining an hour is accepted without it: a source giving
+    # local times only cannot tell the repeated hour apart.
+    elapsed = period_end.astimezone(timezone.utc) - period_start.astimezone(timezone.utc)
+    wall_clock = period_end.replace(tzinfo=None) - period_start.replace(tzinfo=None)
+    data_complete = covered >= min(elapsed, wall_clock) - _TOLERANCE
 
     result = PlanResult(
         period_start=period_start,

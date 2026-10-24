@@ -10,17 +10,19 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
 - Supports Sobry pricing options (`segment`, `turpe`, `profil`, `display`)
 - Supports Sobry API key mode for personalized prices (`/v2/user/daily-prices`)
 - Creates Home Assistant sensors for:
-  - Current price
+  - Current price, which changes on every slot boundary, not only when the
+    API is polled
   - Next price
-  - Minimum price
-  - Maximum price
-  - Average price
-- Exposes full returned price list in `all_prices` attribute of the current price sensor
+  - Minimum, maximum and average price of the current day
+- Exposes today's prices, and tomorrow's once published, in the `all_prices`
+  attribute of the current price sensor (kept out of the recorder history:
+  that list is too large for it)
 - Drives appliances directly from the market price, without writing an automation
   (see [Appliance control](#appliance-control)), with a runtime that can
   [vary over the year](#a-runtime-that-varies), a run that can
   [finish its cycle](#finishing-the-cycle) on the appliance's own consumption,
-  and a fixed-schedule [safety net](#safety-net) when prices cannot be fetched
+  a price under which it [always runs](#always-run-below-a-price), and a
+  fixed-schedule [safety net](#safety-net) when prices cannot be fetched
 
 ## Installation
 
@@ -64,6 +66,7 @@ needs a helper entity and an automation.
 | Window start / end | Daily window the slots are picked in. Same start and end means a full day |
 | Maximum price | Optional cap: a slot above it is never selected, even if hours are missing |
 | Price threshold | Used by the threshold mode |
+| Always run below this price | Optional. Every slot at or under it runs on top of the plan, whatever the mode, window, runtime or maximum price. See [Always run below a price](#always-run-below-a-price) |
 | Fallback start / end | Optional fixed schedule, used whenever the plan cannot decide. See [Safety net](#safety-net) |
 | Wait for the whole window to be priced | Keeps the appliance off until every price of the window is published |
 
@@ -84,6 +87,29 @@ a water heater with no temperature reading gets its 8 cheap hours plus, say, one
 more hour, to be sure it finished heating. The extension applies once per
 window, after the last selected slot, and holds even when the price series
 stops before its end.
+
+### Always run below a price
+
+Whatever the plan decided, some prices are too good to miss: a free or negative
+price on a sunny afternoon is worth heating the water for, even when the plan
+already scheduled its 8 hours tonight. Set *Always run below this price* — `0`
+to catch every free and negative price — and the appliance also runs during
+every slot priced at or under it.
+
+- It comes on top of every other rule: whatever the selection mode, the daily
+  window, the runtime (even `0`, or a month set to `0`), the maximum price, or
+  a window still waiting for its prices.
+- It also runs on top of the [safety net](#safety-net): a forced slot never
+  stops the fixed schedule, and never hides that the plan is blind.
+- A forced run is a bonus, not the run the appliance needs: it is neither
+  extended by the *extra runtime* nor held on by the consumption.
+- Leave it empty to disable it. The *Automatic control* switch still wins:
+  when it is off, the appliance is left alone.
+
+While a slot runs for its price alone, the binary sensor carries
+`force_active: true`, next to `force_price`. Forced slots are listed with the
+others in `slots` and `windows`, and count in the planned hours and the
+planned average price.
 
 ### Finishing the cycle
 
@@ -209,22 +235,34 @@ response_variable: cheapest
 
 The response holds `slots`, `windows`, `period_start`, `period_end`,
 `planned_hours`, `average_price`, `next_start`, `active` and `data_complete`.
+Pass `force_price` to add every slot at or under that price, whatever the
+window: they are listed in `slots` and `windows`, and again in `forced_slots`.
 
 ### Notes on the price horizon
 
-A plan only selects slots the API has already published. *Wait for the whole
+A plan only selects slots the API has already published: tomorrow's prices are
+fetched as soon as they are, early in the afternoon, and the forecasts the
+API-key endpoint returns before that are never planned on. *Wait for the whole
 window to be priced* keeps the appliance off until the whole window is known,
 so the cheapest slots are never missed by planning on half a day; the
 `data_complete` and `reason` attributes of the binary sensor tell you when the
-plan is waiting. A window that extends past the published prices — an overnight
-window while only today is priced — waits for them: keep the window inside the
-day, turn that option off to plan on what is known, or set a fallback schedule
-so the appliance runs anyway.
+plan is waiting.
+
+An overnight window such as `22:00` → `06:00` is therefore planned in the
+afternoon, and stays planned after midnight: the prices of the evening before
+are kept. Without an API key they are fetched again on every refresh; with
+one they are kept in memory, so a restart of Home Assistant in the middle of
+the night leaves the rest of that night waiting — set a fallback schedule to
+cover it.
+
+Days on which the clocks change are handled: a 23-hour day is complete with
+23 hours of prices, a 25-hour day with 24 or 25.
 
 ## Notes
 
 - Without API key, the integration keeps using the existing public endpoint mode.
-- Default update interval is 15 minutes.
+- Default update interval is 15 minutes. Each refresh asks for yesterday,
+  today and tomorrow.
 
 ## Sobry API key (personalized prices)
 
@@ -235,8 +273,16 @@ You can set an optional `api_key` in the integration configuration/options flow.
   - Header `Authorization: Bearer <api_key>`
   - No `contractId` query parameter
   - The V2 `date` and `time` response fields (Europe/Paris) to select the
-    current and next prices
+    current and next prices; on the night the clocks go back, the second
+    occurrence of a time is the repeated hour
+  - `days=1`, for today and tomorrow
 - When `api_key` is not set, the integration uses the previous endpoint/behavior.
+
+The key is entered in a masked field. To remove it, clear the field in
+**Configure** → **Pricing settings**: the integration goes back to the public
+prices. When Sobry refuses the key — revoked or expired — Home Assistant asks
+for a new one from **Settings** → **Devices & Services**; leave it empty there
+to go back to the public prices.
 
 The integration also supports v2 parameters internally:
 - `granularity` mapped to `15m` or `1h`

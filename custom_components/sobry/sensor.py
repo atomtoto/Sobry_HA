@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from statistics import mean
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -12,15 +13,20 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO, UnitOfTime
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, MODE_THRESHOLD
 from .coordinator import SobryDataUpdateCoordinator
 from .entity import SobryPlanEntity
 from .plan import SobryPlan, SobryRuntimeData
+
+# Statistics of the prices of the current day.
+_DAY_STATISTICS = {"min_price": min, "max_price": max, "average_price": mean}
 
 
 async def async_setup_entry(
@@ -55,6 +61,9 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
 
     _attr_native_unit_of_measurement = f"{CURRENCY_EURO}/kWh"
     _attr_should_poll = False
+    # Hundreds of entries, over the recorder size limit: kept in the state
+    # only, not in the history.
+    _unrecorded_attributes = frozenset({"all_prices"})
 
     def __init__(
         self,
@@ -69,10 +78,33 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
         self._attr_name = f"Sobry {name}"
         self._attr_has_entity_name = True
 
+    async def async_added_to_hass(self) -> None:
+        """Follow the slot boundaries, not only the API refreshes."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass, self._async_slot_changed, minute=[0, 15, 30, 45], second=0
+            )
+        )
+
+    @callback
+    def _async_slot_changed(self, _now: datetime) -> None:
+        """Publish the price of the slot that just started."""
+        self.async_write_ha_state()
+
     @property
     def native_value(self) -> float | None:
-        """Return the sensor state."""
-        value = self.coordinator.data.get(self._key)
+        """Return the sensor state, for the slot in force right now."""
+        now = dt_util.utcnow()
+        if self._key == "current_price":
+            slot = self.coordinator.slot_at(now)
+            value = slot.price if slot else None
+        elif self._key == "next_price":
+            slot = self.coordinator.slot_after(now)
+            value = slot.price if slot else None
+        else:
+            prices = [slot.price for slot in self.coordinator.day_slots(now)]
+            value = _DAY_STATISTICS[self._key](prices) if prices else None
         if value is None:
             return None
         return round(float(value), 6)
@@ -83,9 +115,10 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
         if self._key != "current_price":
             return None
 
-        current = self.coordinator.data.get("current", {})
-        next_price = self.coordinator.data.get("next_price")
-        prices = self.coordinator.data.get("prices", [])
+        now = dt_util.utcnow()
+        data = self.coordinator.data or {}
+        current = self.coordinator.price_entry(self.coordinator.slot_at(now))
+        upcoming = self.coordinator.slot_after(now)
 
         return {
             "current_timestamp": current.get("timestamp"),
@@ -96,11 +129,11 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
             "spot_price_eur_kwh": current.get("spot_price_eur_kwh"),
             "price_ht_eur_kwh": current.get("price_ht_eur_kwh"),
             "price_ttc_eur_kwh": current.get("price_ttc_eur_kwh"),
-            "next_price": next_price,
-            "pricing_metadata": self.coordinator.data.get("pricing_metadata", {}),
-            "statistics": self.coordinator.data.get("statistics", {}),
-            "count": self.coordinator.data.get("count"),
-            "all_prices": prices,
+            "next_price": round(upcoming.price, 6) if upcoming else None,
+            "pricing_metadata": data.get("pricing_metadata", {}),
+            "statistics": data.get("statistics", {}),
+            "count": data.get("count"),
+            "all_prices": data.get("prices", []),
         }
 
 
