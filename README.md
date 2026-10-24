@@ -21,8 +21,9 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
   (see [Appliance control](#appliance-control)), with a runtime that can
   [vary over the year](#a-runtime-that-varies), a run that can
   [finish its cycle](#finishing-the-cycle) on the appliance's own consumption,
-  a price under which it [always runs](#always-run-below-a-price), and a
-  fixed-schedule [safety net](#safety-net) when prices cannot be fetched
+  a price under which it [always runs](#always-run-below-a-price), a switch to
+  [force it on](#forcing-the-appliance-on) by hand, and a fixed-schedule
+  [safety net](#safety-net) when prices cannot be fetched
 
 ## Installation
 
@@ -67,6 +68,7 @@ needs a helper entity and an automation.
 | Maximum price | Optional cap: a slot above it is never selected, even if hours are missing |
 | Price threshold | Used by the threshold mode |
 | Always run below this price | Optional. Every slot at or under it runs on top of the plan, whatever the mode, window, runtime or maximum price. See [Always run below a price](#always-run-below-a-price) |
+| Not on days with a negative price | Skips the price above on any day holding a negative price |
 | Fallback start / end | Optional fixed schedule, used whenever the plan cannot decide. See [Safety net](#safety-net) |
 | Wait for the whole window to be priced | Keeps the appliance off until every price of the window is published |
 
@@ -103,6 +105,9 @@ every slot priced at or under it.
   stops the fixed schedule, and never hides that the plan is blind.
 - A forced run is a bonus, not the run the appliance needs: it is neither
   extended by the *extra runtime* nor held on by the consumption.
+- Turn on *Not on days with a negative price* to leave it out on any day
+  (midnight to midnight) with at least one negative price: only the slots the
+  plan selected run that day. A price of exactly `0` is not negative.
 - Leave it empty to disable it. The *Automatic control* switch still wins:
   when it is off, the appliance is left alone.
 
@@ -115,9 +120,9 @@ planned average price.
 
 A water heater that still draws power has not finished heating, and how long it
 needs changes with the incoming water temperature. Point *Keep running while
-this entity draws power* at its power sensor: at the end of a planned window the
-appliance keeps running while that sensor reads above the threshold, and stops
-once it settles below.
+this entity draws power* at its power sensor: at the end of the last planned
+window of the day the appliance keeps running while that sensor reads above the
+threshold, and stops once it settles below.
 
 - The reading has to stay below the threshold for two minutes before the
   appliance stops, so a single dip never cuts a heating cycle short. A power
@@ -126,7 +131,9 @@ once it settles below.
   stuck at 2 kW cannot run the appliance all day. Two hours by default, counted
   from the end of the planned window.
 - Watts and kilowatts are both understood, from the entity's own unit.
-- The hold applies at the end of every planned window, after any fixed *extra
+- The hold applies only at the end of the last planned window of the day (of
+  the window you configured, for an overnight one). An earlier window ends as
+  planned, whatever the appliance still draws. It comes after any fixed *extra
   runtime*, and after a fallback window too.
 - Consumption never *starts* anything: the hold only extends a run the plan
   started, and a Home Assistant restart ends an ongoing hold.
@@ -173,6 +180,7 @@ binary sensor says which one is in charge (`entity`, `month`, `default`, or
 | `number.<name>_runtime` | Hours to schedule, tunable from a dashboard. Replaced by `sensor.<name>_runtime` when the runtime comes from a month or an entity |
 | `number.<name>_price_threshold` | Threshold, for the threshold mode |
 | `switch.<name>_automatic_control` | Created when an entity is controlled. Turn it off to take over manually; the appliance is left as it is, and the plan resumes when you turn it back on |
+| `switch.<name>_force_on` | Turn it on to run the appliance now, whatever the plan says. See [Forcing the appliance on](#forcing-the-appliance-on) |
 | `binary_sensor.<name>_fixed_schedule_fallback` | Created when a fallback schedule is set. `on` while the fixed schedule is in charge |
 
 The schedule is re-evaluated every minute and on every price refresh, so slots
@@ -193,6 +201,19 @@ automation:
         target:
           entity_id: switch.water_heater_relay
 ```
+
+### Forcing the appliance on
+
+`switch.<name>_force_on` runs the appliance right away, on top of everything:
+the plan, the prices, a missing API. It stays on until you turn it off, then
+the plan takes over again at once — off outside the planned slots. It replaces
+the `input_boolean` of a hand-made "force" automation.
+
+- It works without an entity to control: the binary sensor turns `on`, and
+  carries `boost_active: true`.
+- *Automatic control* still wins: while it is off, the appliance is left alone.
+- It survives a Home Assistant restart. It never arms the
+  [consumption hold](#finishing-the-cycle).
 
 ### Safety net
 
@@ -237,6 +258,8 @@ The response holds `slots`, `windows`, `period_start`, `period_end`,
 `planned_hours`, `average_price`, `next_start`, `active` and `data_complete`.
 Pass `force_price` to add every slot at or under that price, whatever the
 window: they are listed in `slots` and `windows`, and again in `forced_slots`.
+Add `force_skip_negative: true` to leave it out on the days holding a negative
+price.
 
 ### Notes on the price horizon
 

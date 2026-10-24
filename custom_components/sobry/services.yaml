@@ -75,6 +75,11 @@ get_cheapest_slots:
           max: 5
           step: 0.001
           mode: box
+    force_skip_negative:
+      required: false
+      default: false
+      selector:
+        boolean:
     require_complete_data:
       required: false
       default: false

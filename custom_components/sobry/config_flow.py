@@ -21,6 +21,7 @@ from .const import (
     CONF_FALLBACK_END,
     CONF_FALLBACK_START,
     CONF_FORCE_PRICE,
+    CONF_FORCE_SKIP_NEGATIVE,
     CONF_GRANULARITY,
     CONF_HOURS,
     CONF_HOURS_BY_MONTH,
@@ -171,6 +172,7 @@ def _plan_schema() -> vol.Schema:
                 CONF_THRESHOLD_PRICE, default=DEFAULT_THRESHOLD_PRICE
             ): PRICE_SELECTOR,
             vol.Optional(CONF_FORCE_PRICE): PRICE_SELECTOR,
+            vol.Required(CONF_FORCE_SKIP_NEGATIVE, default=False): selector.BooleanSelector(),
             vol.Optional(CONF_FALLBACK_START): selector.TimeSelector(),
             vol.Optional(CONF_FALLBACK_END): selector.TimeSelector(),
             vol.Required(

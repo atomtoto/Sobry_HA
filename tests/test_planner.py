@@ -447,6 +447,123 @@ class TestPlanning(unittest.TestCase):
         self.assertEqual(result.forced, [])
         self.assertEqual(result.planned_windows, result.windows)
 
+    def _negative_day_slots(self) -> list:
+        # The 15th holds one negative hour, the 16th none.
+        today = [0.05] * 6 + [0.30] * 6 + [-0.02] + [0.30] * 3 + [0.06] * 3 + [0.40] * 5
+        tomorrow = [0.05] * 6 + [0.30] * 18
+        return planner.build_slots(
+            _series("2026-01-15", today) + _series("2026-01-16", tomorrow)
+        )
+
+    def test_force_price_still_runs_on_a_day_with_a_negative_price(self) -> None:
+        result = planner.build_plan(
+            self._negative_day_slots(),
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=2,
+            force_price=0.06,
+        )
+        days = {slot.start.astimezone(PARIS).day for slot in result.forced}
+        self.assertEqual(days, {15, 16})
+
+    def test_force_price_is_skipped_on_a_day_with_a_negative_price(self) -> None:
+        result = planner.build_plan(
+            self._negative_day_slots(),
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=2,
+            force_price=0.06,
+            force_skip_negative=True,
+        )
+        # The 15th has a negative price: only the plan runs. The 16th has
+        # none, so its cheap night runs on top of the two hours it planned.
+        forced = [slot.start.astimezone(PARIS) for slot in result.forced]
+        self.assertEqual({start.day for start in forced}, {16})
+        self.assertEqual(sorted(start.hour for start in forced), [2, 3, 4, 5])
+        today = [
+            slot.start.astimezone(PARIS).hour
+            for slot in result.selected
+            if slot.start.astimezone(PARIS).day == 15
+        ]
+        self.assertEqual(today, [0, 12])
+        self.assertFalse(result.is_forced(_local("2026-01-15T14:00:00")))
+        self.assertFalse(result.is_active(_local("2026-01-15T14:00:00")))
+        self.assertTrue(result.is_active(_local("2026-01-15T12:30:00")))
+
+    def test_skip_negative_days_ignores_a_zero_price(self) -> None:
+        prices = [0.0] + [0.05] * 5 + [0.30] * 18
+        result = planner.build_plan(
+            planner.build_slots(_series("2026-01-15", prices)),
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=1,
+            force_price=0.06,
+            force_skip_negative=True,
+        )
+        self.assertEqual(len(result.forced), 5)
+
+    def test_last_window_closes_the_period(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=8,
+        )
+        first, last = result.windows
+        self.assertEqual(result.last_end, _local("2026-01-15T15:00:00"))
+        self.assertFalse(result.closes_period(first))
+        self.assertTrue(result.closes_period(last))
+
+    def test_last_window_includes_the_extra_runtime(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=8,
+            extra_hours=1,
+        )
+        self.assertEqual(result.last_end, _local("2026-01-15T16:00:00"))
+        self.assertFalse(result.closes_period(result.windows[0]))
+        self.assertTrue(result.closes_period(result.windows[-1]))
+
+    def test_forced_slots_do_not_close_the_period(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=2,
+            force_price=0.06,
+        )
+        # The plan ends at 02:00, the forced afternoon runs after it.
+        self.assertEqual(result.last_end, _local("2026-01-15T02:00:00"))
+        (planned,) = result.planned_windows
+        self.assertTrue(result.closes_period(planned))
+
+    def test_merged_next_period_keeps_the_window_closing_today(self) -> None:
+        slots = planner.build_slots(
+            _series("2026-01-15", [0.30] * 23 + [0.01])
+            + _series("2026-01-16", [0.01] + [0.30] * 23)
+        )
+        result = planner.build_plan(
+            slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=1,
+            extra_hours=1,
+        )
+        (window,) = result.windows
+        self.assertEqual(result.last_end, _local("2026-01-16T01:00:00"))
+        self.assertTrue(result.closes_period(window))
+
+    def test_no_window_closes_nothing(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=0,
+        )
+        self.assertIsNone(result.last_end)
+
     def test_quarter_hourly_series(self) -> None:
         prices = [0.4] * 96
         for index in range(8, 16):  # 02:00 -> 04:00

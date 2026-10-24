@@ -73,6 +73,7 @@
           "max_price": "Maximum price",
           "threshold_price": "Price threshold",
           "force_price": "Always run below this price",
+          "force_skip_negative": "Not on days with a negative price",
           "require_complete_data": "Wait for the whole window to be priced"
         },
         "data_description": {
@@ -81,14 +82,15 @@
           "hours": "Daily runtime to schedule during the window. Used unless a month or an entity provides one.",
           "hours_entity": "Optional. An input_number, a number or a sensor whose value is a number of hours — a template sensor on the outdoor temperature, the season, the day of the week. It wins over the months and over the runtime above, and replaces the runtime number by a sensor.",
           "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
-          "power_entity": "Optional. A power sensor of the appliance. At the end of a planned window the appliance keeps running while that entity reads above the threshold below — a water heater still drawing power has not finished heating. Watts and kilowatts are both understood.",
+          "power_entity": "Optional. A power sensor of the appliance. After the last planned window of the day the appliance keeps running while that entity reads above the threshold below — a water heater still drawing power has not finished heating. Watts and kilowatts are both understood.",
           "power_threshold": "Consumption under which the appliance is considered done, in watts. It has to stay below for two minutes before the appliance stops, so a single dip does not cut a heating cycle short.",
-          "power_hold_max": "The hold never lasts longer than this after the planned window, whatever the consumption reads. Keeps a stuck sensor from running the appliance all day.",
+          "power_hold_max": "The hold never lasts longer than this after the last planned window of the day, whatever the consumption reads. Keeps a stuck sensor from running the appliance all day.",
           "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
           "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
           "threshold_price": "Used by the \"below a price threshold\" mode only.",
           "force_price": "Optional. Whatever the mode, the window, the runtime or the maximum price, the appliance also runs during every slot priced at or below this value. Set 0 to make the most of free and negative prices, leave empty to disable.",
+          "force_skip_negative": "Optional. With a price set above, leaves it out on any day that has a negative price: only the slots the plan selected run those days.",
           "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
           "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
@@ -119,6 +121,7 @@
           "max_price": "Maximum price",
           "threshold_price": "Price threshold",
           "force_price": "Always run below this price",
+          "force_skip_negative": "Not on days with a negative price",
           "require_complete_data": "Wait for the whole window to be priced"
         },
         "data_description": {
@@ -127,14 +130,15 @@
           "hours": "Daily runtime to schedule during the window. Used unless a month or an entity provides one.",
           "hours_entity": "Optional. An input_number, a number or a sensor whose value is a number of hours — a template sensor on the outdoor temperature, the season, the day of the week. It wins over the months and over the runtime above, and replaces the runtime number by a sensor.",
           "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
-          "power_entity": "Optional. A power sensor of the appliance. At the end of a planned window the appliance keeps running while that entity reads above the threshold below — a water heater still drawing power has not finished heating. Watts and kilowatts are both understood.",
+          "power_entity": "Optional. A power sensor of the appliance. After the last planned window of the day the appliance keeps running while that entity reads above the threshold below — a water heater still drawing power has not finished heating. Watts and kilowatts are both understood.",
           "power_threshold": "Consumption under which the appliance is considered done, in watts. It has to stay below for two minutes before the appliance stops, so a single dip does not cut a heating cycle short.",
-          "power_hold_max": "The hold never lasts longer than this after the planned window, whatever the consumption reads. Keeps a stuck sensor from running the appliance all day.",
+          "power_hold_max": "The hold never lasts longer than this after the last planned window of the day, whatever the consumption reads. Keeps a stuck sensor from running the appliance all day.",
           "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
           "window_end": "End of the daily window. A window ending before it starts runs overnight.",
           "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
           "threshold_price": "Used by the \"below a price threshold\" mode only.",
           "force_price": "Optional. Whatever the mode, the window, the runtime or the maximum price, the appliance also runs during every slot priced at or below this value. Set 0 to make the most of free and negative prices, leave empty to disable.",
+          "force_skip_negative": "Optional. With a price set above, leaves it out on any day that has a negative price: only the slots the plan selected run those days.",
           "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
           "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
@@ -215,6 +219,9 @@
     "switch": {
       "plan_control": {
         "name": "Automatic control"
+      },
+      "plan_boost": {
+        "name": "Force on"
       }
     }
   },
@@ -258,6 +265,10 @@
         "force_price": {
           "name": "Always run below",
           "description": "Also select every slot priced at or below this value, whatever the window, the runtime or the maximum price."
+        },
+        "force_skip_negative": {
+          "name": "Not on days with a negative price",
+          "description": "Leave the \"always run below\" price out on any day that has a negative price."
         },
         "require_complete_data": {
           "name": "Require complete prices",

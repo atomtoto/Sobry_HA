@@ -20,6 +20,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_EXTRA_HOURS,
     CONF_FORCE_PRICE,
+    CONF_FORCE_SKIP_NEGATIVE,
     CONF_HOURS,
     CONF_MAX_PRICE,
     CONF_MODE,
@@ -52,6 +53,7 @@ GET_CHEAPEST_SLOTS_SCHEMA = vol.Schema(
         vol.Optional(CONF_MAX_PRICE): vol.Coerce(float),
         vol.Optional(CONF_THRESHOLD_PRICE): vol.Coerce(float),
         vol.Optional(CONF_FORCE_PRICE): vol.Coerce(float),
+        vol.Optional(CONF_FORCE_SKIP_NEGATIVE, default=False): cv.boolean,
         vol.Optional(CONF_REQUIRE_COMPLETE_DATA, default=False): cv.boolean,
     }
 )
@@ -110,6 +112,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
             extra_hours=call.data[CONF_EXTRA_HOURS],
             require_complete_data=call.data[CONF_REQUIRE_COMPLETE_DATA],
             force_price=call.data.get(CONF_FORCE_PRICE),
+            force_skip_negative=call.data[CONF_FORCE_SKIP_NEGATIVE],
         )
 
         next_window = result.next_window(now)

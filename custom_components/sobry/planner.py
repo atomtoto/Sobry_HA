@@ -153,6 +153,9 @@ class PlanResult:
     # on its own, are also kept apart.
     forced: list[PriceSlot] = field(default_factory=list)
     planned_windows: list[PlanWindow] = field(default_factory=list)
+    # Where the last run of the current period ends, before the next period is
+    # merged in. Only that run may be held on by the appliance's consumption.
+    last_end: datetime | None = None
 
     @property
     def selected_hours(self) -> float:
@@ -189,6 +192,10 @@ class PlanResult:
     def is_forced(self, moment: datetime) -> bool:
         """Return True when ``moment`` falls in a slot run for its price alone."""
         return any(slot.contains(moment) for slot in self.forced)
+
+    def closes_period(self, window: PlanWindow) -> bool:
+        """Return True when ``window`` holds the last run of the current period."""
+        return self.last_end is not None and window.start < self.last_end <= window.end
 
     def next_window(self, moment: datetime) -> PlanWindow | None:
         """Return the first window starting after ``moment``."""
@@ -367,18 +374,31 @@ def add_forced_slots(
     slots: list[PriceSlot],
     force_price: float,
     since: datetime,
+    tz: tzinfo,
+    skip_negative_days: bool = False,
 ) -> None:
     """Run the device during every slot priced at or under ``force_price``.
 
     The forced slots come on top of the plan, whatever its window, runtime or
     maximum price. They are not extended: a run the price imposes is a bonus,
     not the run the device needs.
+
+    With ``skip_negative_days``, a day (read in ``tz``) holding a negative
+    price forces nothing: only the slots the plan selected run that day.
     """
+    negative_days = (
+        {slot.start.astimezone(tz).date() for slot in slots if slot.price < 0}
+        if skip_negative_days
+        else set()
+    )
     selected = set(result.selected)
     forced = [
         slot
         for slot in slots
-        if slot.end > since and slot.price <= force_price and slot not in selected
+        if slot.end > since
+        and slot.price <= force_price
+        and slot not in selected
+        and slot.start.astimezone(tz).date() not in negative_days
     ]
     if not forced:
         return
@@ -467,6 +487,7 @@ def build_plan(
     extra_hours: float = 0.0,
     require_complete_data: bool = True,
     force_price: float | None = None,
+    force_skip_negative: bool = False,
 ) -> PlanResult:
     """Plan when a device should run, for the current window occurrence.
 
@@ -475,7 +496,8 @@ def build_plan(
     next start beyond the end of the current period.
 
     Every known slot priced at or under ``force_price`` is added on top, from
-    the start of the current period or from now, whichever comes first.
+    the start of the current period or from now, whichever comes first, except
+    on the days holding a negative price when ``force_skip_negative`` is set.
     """
     period_start, period_end = period_bounds(moment, window_start, window_end, tz)
     result = _plan_period(
@@ -489,6 +511,7 @@ def build_plan(
         extra_hours=extra_hours,
         require_complete_data=require_complete_data,
     )
+    result.last_end = max((window.end for window in result.windows), default=None)
 
     next_start, next_end = period_bounds(period_end + _TOLERANCE, window_start, window_end, tz)
     if next_start >= period_end:
@@ -512,7 +535,14 @@ def build_plan(
 
     result.planned_windows = list(result.windows)
     if force_price is not None:
-        add_forced_slots(result, slots, force_price, min(period_start, moment))
+        add_forced_slots(
+            result,
+            slots,
+            force_price,
+            min(period_start, moment),
+            tz,
+            force_skip_negative,
+        )
     return result
 
 

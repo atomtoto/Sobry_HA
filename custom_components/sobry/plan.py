@@ -28,6 +28,7 @@ from .const import (
     CONF_FALLBACK_END,
     CONF_FALLBACK_START,
     CONF_FORCE_PRICE,
+    CONF_FORCE_SKIP_NEGATIVE,
     CONF_HOURS,
     CONF_HOURS_BY_MONTH,
     CONF_HOURS_ENTITY,
@@ -152,6 +153,8 @@ class SobryPlan:
         self.max_price = _as_float(config.get(CONF_MAX_PRICE))
         # Slots at or under that price run the appliance whatever the plan says.
         self.force_price = _as_float(config.get(CONF_FORCE_PRICE))
+        # ... except on a day holding a negative price, when that is set.
+        self.force_skip_negative = bool(config.get(CONF_FORCE_SKIP_NEGATIVE, False))
         # Runtime sources, in order of precedence: an entity, the month of the
         # period, then the runtime configured on the plan.
         self.hours_entity: str | None = config.get(CONF_HOURS_ENTITY) or None
@@ -183,6 +186,8 @@ class SobryPlan:
         self._hours = self.configured_hours
         self._threshold_price = self.configured_threshold_price
         self._control_enabled = True
+        # Switched on by hand: the appliance runs whatever the plan says.
+        self._boost = False
         self._control_started = False
         self._applied_state: bool | None = None
         self._last_control_error: str | None = None
@@ -246,6 +251,11 @@ class SobryPlan:
         return self._control_enabled
 
     @property
+    def boost(self) -> bool:
+        """Return whether the appliance is forced on by hand."""
+        return self._boost
+
+    @property
     def is_active(self) -> bool | None:
         """Return whether the appliance should be running right now."""
         return self._active
@@ -279,9 +289,14 @@ class SobryPlan:
         """Return whether the plan knows what the appliance should do.
 
         A plan running on its fixed fallback schedule stays available: it is
-        precisely the case where the prices are missing.
+        precisely the case where the prices are missing. So is a forced one,
+        which does not depend on them.
         """
-        return self.result is not None or self._fallback_window is not None
+        return (
+            self.result is not None
+            or self._fallback_window is not None
+            or self._boost
+        )
 
     async def async_set_hours(self, hours: float) -> None:
         """Change the scheduled runtime."""
@@ -301,6 +316,11 @@ class SobryPlan:
             self._applied_state = None
         await self.async_update()
 
+    async def async_set_boost(self, enabled: bool) -> None:
+        """Force the appliance on, or give it back to the plan."""
+        self._boost = bool(enabled)
+        await self.async_update()
+
     @callback
     def async_restore_settings(
         self,
@@ -308,6 +328,7 @@ class SobryPlan:
         hours: float | None = None,
         threshold_price: float | None = None,
         control_enabled: bool | None = None,
+        boost: bool | None = None,
     ) -> None:
         """Apply values restored by the entities, before control starts."""
         if hours is not None:
@@ -316,6 +337,8 @@ class SobryPlan:
             self._threshold_price = float(threshold_price)
         if control_enabled is not None:
             self._control_enabled = bool(control_enabled)
+        if boost is not None:
+            self._boost = bool(boost)
         self.async_recalculate()
 
     # -- Listeners --------------------------------------------------------
@@ -364,6 +387,7 @@ class SobryPlan:
                 extra_hours=self.extra_hours,
                 require_complete_data=self.require_complete_data,
                 force_price=self.force_price,
+                force_skip_negative=self.force_skip_negative,
             )
             if slots
             else None
@@ -394,6 +418,11 @@ class SobryPlan:
             # the fixed schedule. Being a bonus, it never arms the power hold.
             self._active = True
 
+        if self._boost:
+            # Forced by hand: on whatever the plan, the prices or the hold say,
+            # and it hands back to the plan as soon as it is switched off.
+            self._active = True
+
     def _apply_power_hold(self, moment: datetime, planned: bool) -> bool:
         """Extend the run past the planned window while power stays high.
 
@@ -404,11 +433,15 @@ class SobryPlan:
         power = self._power_reading()
 
         if planned:
-            # Running on the plan: arm the hold for the end of the window.
+            # Running on the plan: arm the hold for the end of the window, but
+            # only the last one of the period. An earlier run is not the end of
+            # the day's heating, whatever the appliance still draws.
             self._holding = False
             self._power_below_since = None
-            self._hold_deadline = self._planned_end(moment) + timedelta(
-                hours=self.power_hold_max
+            self._hold_deadline = (
+                self._planned_end(moment) + timedelta(hours=self.power_hold_max)
+                if self._closes_period(moment)
+                else None
             )
             return True
 
@@ -433,6 +466,16 @@ class SobryPlan:
             return False
         self._holding = True
         return True
+
+    def _closes_period(self, moment: datetime) -> bool:
+        """Return True when the run going on is the last one of its period."""
+        if self._fallback_window is not None:
+            # The fixed schedule is a single run per period.
+            return True
+        if self.result is None:
+            return False
+        window = self.result.planned_window(moment)
+        return window is not None and self.result.closes_period(window)
 
     def _planned_end(self, moment: datetime) -> datetime:
         """Return when the appliance is scheduled to stop running."""
@@ -648,6 +691,7 @@ class SobryPlan:
         attributes: dict[str, Any] = {
             "mode": self.mode,
             "control_enabled": self._control_enabled,
+            "boost_active": self._boost,
             "target_entity": self.target_entity,
             "window_start": self.window_start.isoformat(),
             "window_end": self.window_end.isoformat(),
@@ -679,6 +723,7 @@ class SobryPlan:
             attributes["max_price"] = self.max_price
         if self.force_price is not None:
             attributes["force_price"] = self.force_price
+            attributes["force_skip_negative"] = self.force_skip_negative
             attributes["force_active"] = self._forced
 
         if self._fallback_window is not None:

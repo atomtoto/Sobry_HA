@@ -43,6 +43,7 @@ CONF_FALLBACK_START = "fallback_start"
 CONF_FALLBACK_END = "fallback_end"
 CONF_THRESHOLD_PRICE = "threshold_price"
 CONF_FORCE_PRICE = "force_price"
+CONF_FORCE_SKIP_NEGATIVE = "force_skip_negative"
 CONF_REQUIRE_COMPLETE_DATA = "require_complete_data"
 
 # Where the runtime of a plan comes from, exposed as an attribute.

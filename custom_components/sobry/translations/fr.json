@@ -73,6 +73,7 @@
           "max_price": "Prix maximum",
           "threshold_price": "Prix seuil",
           "force_price": "Toujours lancer sous ce prix",
+          "force_skip_negative": "Sauf les jours à prix négatif",
           "require_complete_data": "Attendre que toute la plage soit tarifée"
         },
         "data_description": {
@@ -81,14 +82,15 @@
           "hours": "Durée quotidienne à programmer dans la plage. Utilisée sauf si un mois ou une entité en fournit une.",
           "hours_entity": "Facultatif. Un input_number, un number ou un capteur dont la valeur est un nombre d'heures : capteur template sur la température extérieure, la saison, le jour de la semaine. Elle a priorité sur les mois et sur la durée ci-dessus, et remplace le number de durée par un capteur.",
           "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
-          "power_entity": "Facultatif. Un capteur de puissance de l'appareil. À la fin d'une plage planifiée, l'appareil continue de fonctionner tant que cette entité dépasse le seuil ci-dessous : un chauffe-eau qui consomme encore n'a pas fini de chauffer. Les watts et les kilowatts sont tous deux reconnus.",
+          "power_entity": "Facultatif. Un capteur de puissance de l'appareil. Après la dernière plage planifiée de la journée, l'appareil continue de fonctionner tant que cette entité dépasse le seuil ci-dessous : un chauffe-eau qui consomme encore n'a pas fini de chauffer. Les watts et les kilowatts sont tous deux reconnus.",
           "power_threshold": "Consommation en watts sous laquelle l'appareil est considéré comme terminé. Elle doit rester sous le seuil pendant deux minutes avant l'arrêt, pour qu'une simple chute ne coupe pas un cycle de chauffe.",
-          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la plage planifiée, quelle que soit la consommation. Évite qu'un capteur bloqué fasse tourner l'appareil toute la journée.",
+          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la dernière plage planifiée de la journée, quelle que soit la consommation. Évite qu'un capteur bloqué fasse tourner l'appareil toute la journée.",
           "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
           "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
           "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
           "force_price": "Facultatif. Quels que soient le mode, la plage, la durée ou le prix maximum, l'appareil fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur. Indiquez 0 pour profiter des prix nuls et négatifs, laissez vide pour désactiver.",
+          "force_skip_negative": "Facultatif. Avec un prix défini ci-dessus, l'ignore tous les jours où au moins un prix est négatif : seuls les créneaux retenus par le plan fonctionnent ces jours-là.",
           "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
           "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
@@ -119,6 +121,7 @@
           "max_price": "Prix maximum",
           "threshold_price": "Prix seuil",
           "force_price": "Toujours lancer sous ce prix",
+          "force_skip_negative": "Sauf les jours à prix négatif",
           "require_complete_data": "Attendre que toute la plage soit tarifée"
         },
         "data_description": {
@@ -127,14 +130,15 @@
           "hours": "Durée quotidienne à programmer dans la plage. Utilisée sauf si un mois ou une entité en fournit une.",
           "hours_entity": "Facultatif. Un input_number, un number ou un capteur dont la valeur est un nombre d'heures : capteur template sur la température extérieure, la saison, le jour de la semaine. Elle a priorité sur les mois et sur la durée ci-dessus, et remplace le number de durée par un capteur.",
           "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
-          "power_entity": "Facultatif. Un capteur de puissance de l'appareil. À la fin d'une plage planifiée, l'appareil continue de fonctionner tant que cette entité dépasse le seuil ci-dessous : un chauffe-eau qui consomme encore n'a pas fini de chauffer. Les watts et les kilowatts sont tous deux reconnus.",
+          "power_entity": "Facultatif. Un capteur de puissance de l'appareil. Après la dernière plage planifiée de la journée, l'appareil continue de fonctionner tant que cette entité dépasse le seuil ci-dessous : un chauffe-eau qui consomme encore n'a pas fini de chauffer. Les watts et les kilowatts sont tous deux reconnus.",
           "power_threshold": "Consommation en watts sous laquelle l'appareil est considéré comme terminé. Elle doit rester sous le seuil pendant deux minutes avant l'arrêt, pour qu'une simple chute ne coupe pas un cycle de chauffe.",
-          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la plage planifiée, quelle que soit la consommation. Évite qu'un capteur bloqué fasse tourner l'appareil toute la journée.",
+          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la dernière plage planifiée de la journée, quelle que soit la consommation. Évite qu'un capteur bloqué fasse tourner l'appareil toute la journée.",
           "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
           "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
           "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
           "force_price": "Facultatif. Quels que soient le mode, la plage, la durée ou le prix maximum, l'appareil fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur. Indiquez 0 pour profiter des prix nuls et négatifs, laissez vide pour désactiver.",
+          "force_skip_negative": "Facultatif. Avec un prix défini ci-dessus, l'ignore tous les jours où au moins un prix est négatif : seuls les créneaux retenus par le plan fonctionnent ces jours-là.",
           "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
           "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
@@ -215,6 +219,9 @@
     "switch": {
       "plan_control": {
         "name": "Pilotage automatique"
+      },
+      "plan_boost": {
+        "name": "Forcer"
       }
     }
   },
@@ -258,6 +265,10 @@
         "force_price": {
           "name": "Toujours lancer sous",
           "description": "Retenir aussi chaque créneau dont le prix est inférieur ou égal à cette valeur, quels que soient la plage, la durée ou le prix maximum."
+        },
+        "force_skip_negative": {
+          "name": "Sauf les jours à prix négatif",
+          "description": "Ignorer le prix « toujours lancer sous » les jours où au moins un prix est négatif."
         },
         "require_complete_data": {
           "name": "Exiger des prix complets",
