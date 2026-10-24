@@ -67,6 +67,27 @@ class TestSlots(unittest.TestCase):
         self.assertEqual(len(slots), 4)
         self.assertTrue(all(slot.duration == timedelta(hours=1) for slot in slots))
 
+    def test_build_slots_skips_unpublished_and_forecast_prices(self) -> None:
+        raw = _series("2026-01-15", [1.0, 2.0, 3.0, 4.0])
+        raw[1]["price"] = None  # placeholder of an hour not published yet
+        raw[2]["estimated"] = True  # forecast beyond the day-ahead
+        slots = planner.build_slots(raw)
+        self.assertEqual([slot.price for slot in slots], [1.0, 4.0])
+
+    def test_merge_price_entries_keeps_the_evening_before(self) -> None:
+        yesterday = _series("2026-01-15", [0.30] * 24)
+        today = _series("2026-01-16", [0.20] * 24)
+        updated = _series("2026-01-16", [0.10] * 24)
+        merged = planner.merge_price_entries(
+            yesterday + today, updated, _local("2026-01-15T12:00:00")
+        )
+        self.assertEqual(len(merged), 36)
+        self.assertEqual(
+            planner.entry_start(merged[0]), _local("2026-01-15T12:00:00")
+        )
+        # The latest prices win over the ones they replace.
+        self.assertEqual({item["price"] for item in merged[12:]}, {0.10})
+
     def test_extract_price_fallbacks(self) -> None:
         self.assertEqual(planner.extract_price({"price": "0.12"}), 0.12)
         self.assertEqual(planner.extract_price({"price_ttc_eur_kwh": 0.2}), 0.2)
@@ -209,6 +230,81 @@ class TestPlanning(unittest.TestCase):
         self.assertTrue(result.data_complete)
         self.assertEqual(_hours_of(result), [0, 1, 2, 3])
         self.assertEqual(result.windows[0].start, _local("2026-01-16T00:00:00"))
+
+    def test_overnight_window_survives_midnight(self) -> None:
+        evening = _series("2026-01-15", [0.30] * 24)
+        night = _series("2026-01-16", [0.30] * 2 + [0.01] * 2 + [0.30] * 20)
+        before = planner.build_plan(
+            planner.build_slots(evening + night),
+            _local("2026-01-15T23:50:00"),
+            PARIS,
+            hours=2,
+            window_start=time(22, 0),
+            window_end=time(6, 0),
+        )
+        # After midnight the API only serves the new day: the evening before
+        # is kept from the previous refresh, and the night is still planned.
+        kept = planner.merge_price_entries(
+            evening + night, night, _local("2026-01-15T00:00:00")
+        )
+        after = planner.build_plan(
+            planner.build_slots(kept),
+            _local("2026-01-16T00:20:00"),
+            PARIS,
+            hours=2,
+            window_start=time(22, 0),
+            window_end=time(6, 0),
+        )
+        for result in (before, after):
+            self.assertTrue(result.data_complete)
+            self.assertEqual(_hours_of(result), [2, 3])
+
+    def test_short_day_is_complete(self) -> None:
+        # 28 March 2027: the clocks go forward, the day lasts 23 hours.
+        start = _local("2027-03-28T00:00:00").astimezone(timezone.utc)
+        raw = [
+            {"timestamp": (start + timedelta(hours=index)).isoformat(), "price": 0.1}
+            for index in range(23)
+        ]
+        result = planner.build_plan(
+            planner.build_slots(raw), _local("2027-03-28T10:00:00"), PARIS, hours=4
+        )
+        self.assertTrue(result.data_complete)
+        self.assertEqual(result.selected_hours, 4)
+
+    def test_long_day_is_complete(self) -> None:
+        # 25 October 2026: the clocks go back, the day lasts 25 hours. It is
+        # complete with them all, and without the repeated hour as well.
+        start = _local("2026-10-25T00:00:00").astimezone(timezone.utc)
+        for count, skipped in ((25, None), (24, 2)):
+            raw = [
+                {"timestamp": (start + timedelta(hours=index)).isoformat(), "price": 0.1}
+                for index in range(count + (skipped is not None))
+                if index != skipped
+            ]
+            result = planner.build_plan(
+                planner.build_slots(raw), _local("2026-10-25T10:00:00"), PARIS, hours=4
+            )
+            self.assertTrue(result.data_complete, count)
+
+    def test_overnight_window_across_the_clock_change(self) -> None:
+        # 22:00 -> 06:00 on the night the clocks go forward lasts 7 hours.
+        start = _local("2027-03-27T22:00:00").astimezone(timezone.utc)
+        raw = [
+            {"timestamp": (start + timedelta(hours=index)).isoformat(), "price": 0.1}
+            for index in range(7)
+        ]
+        result = planner.build_plan(
+            planner.build_slots(raw),
+            _local("2027-03-27T21:00:00"),
+            PARIS,
+            hours=2,
+            window_start=time(22, 0),
+            window_end=time(6, 0),
+        )
+        self.assertTrue(result.data_complete)
+        window = planner.PlanWindow(result.period_start, result.period_end, 0.0)
+        self.assertEqual(window.hours, 7)
 
     def test_next_period_is_planned_when_available(self) -> None:
         slots = planner.build_slots(

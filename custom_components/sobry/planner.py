@@ -41,6 +41,40 @@ def extract_price(item: Any) -> float | None:
         return None
 
 
+def entry_start(item: Any) -> datetime | None:
+    """Return the UTC start of an API entry carrying a ``timestamp``."""
+    if not isinstance(item, dict):
+        return None
+    raw = item.get("timestamp")
+    if not raw:
+        return None
+    try:
+        start = datetime.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    return start.astimezone(timezone.utc)
+
+
+def merge_price_entries(
+    previous: list[Any], latest: list[Any], since: datetime
+) -> list[dict[str, Any]]:
+    """Return ``latest`` completed by the entries of ``previous`` it lacks.
+
+    A refresh after midnight no longer returns the evening before: keeping
+    those prices lets a window that started yesterday still be planned.
+    Entries starting before ``since`` are dropped, ``latest`` wins on a tie.
+    """
+    merged: dict[datetime, dict[str, Any]] = {}
+    for item in [*previous, *latest]:
+        start = entry_start(item)
+        if start is None or start < since:
+            continue
+        merged[start] = item
+    return [merged[start] for start in sorted(merged)]
+
+
 @dataclass(frozen=True)
 class PriceSlot:
     """A single priced time slot."""
@@ -84,8 +118,8 @@ class PlanWindow:
 
     @property
     def hours(self) -> float:
-        """Return the window length in hours."""
-        return (self.end - self.start).total_seconds() / 3600
+        """Return the window length in hours, daylight saving time included."""
+        return (self.end.timestamp() - self.start.timestamp()) / 3600
 
     def contains(self, moment: datetime) -> bool:
         """Return True when ``moment`` falls inside the window."""
@@ -181,22 +215,20 @@ def build_slots(
     prices: list[Any],
     default_duration: timedelta = DEFAULT_SLOT_DURATION,
 ) -> list[PriceSlot]:
-    """Turn raw API entries into sorted, non overlapping price slots."""
+    """Turn raw API entries into sorted, non overlapping price slots.
+
+    Entries without a price (not published yet) and forecasts (``estimated``)
+    are left out: a plan only relies on published prices.
+    """
     parsed: list[tuple[datetime, float]] = []
     for item in prices:
         price = extract_price(item)
-        if price is None or not isinstance(item, dict):
+        if price is None or item.get("estimated"):
             continue
-        raw = item.get("timestamp")
-        if not raw:
+        start = entry_start(item)
+        if start is None:
             continue
-        try:
-            start = datetime.fromisoformat(raw)
-        except (TypeError, ValueError):
-            continue
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
-        parsed.append((start.astimezone(timezone.utc), price))
+        parsed.append((start, price))
 
     parsed.sort(key=lambda entry: entry[0])
     # Drop duplicated timestamps, keeping the last value seen for a given start.
@@ -499,7 +531,12 @@ def _plan_period(
     """Plan a single window occurrence."""
     candidates = [slot for slot in slots if period_start <= slot.start < period_end]
     covered = sum((slot.duration for slot in candidates), timedelta(0))
-    data_complete = covered >= (period_end - period_start) - _TOLERANCE
+    # A period losing an hour to daylight saving time is complete with one
+    # hour less. One gaining an hour is accepted without it: a source giving
+    # local times only cannot tell the repeated hour apart.
+    elapsed = period_end.astimezone(timezone.utc) - period_start.astimezone(timezone.utc)
+    wall_clock = period_end.replace(tzinfo=None) - period_start.replace(tzinfo=None)
+    data_complete = covered >= min(elapsed, wall_clock) - _TOLERANCE
 
     result = PlanResult(
         period_start=period_start,

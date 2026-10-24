@@ -13,10 +13,19 @@
           "tax_mode": "Mode de taxation",
           "api_key": "Clé API Sobry"
         }
+      },
+      "reauth_confirm": {
+        "title": "Clé API Sobry refusée",
+        "description": "Sobry a refusé la clé API : elle a été révoquée ou a expiré. Saisissez une nouvelle clé, ou laissez le champ vide pour utiliser les prix publics.",
+        "data": {
+          "api_key": "Clé API Sobry"
+        }
       }
     },
     "abort": {
-      "already_configured": "Sobry Energy est déjà configuré."
+      "already_configured": "Sobry Energy est déjà configuré.",
+      "reauth_successful": "La clé API a été mise à jour.",
+      "reauth_failed": "L'entrée Sobry n'existe plus."
     }
   },
   "options": {

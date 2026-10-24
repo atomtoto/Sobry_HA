@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 import uuid
 
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import selector
@@ -81,6 +83,10 @@ CONTROLLABLE_DOMAINS = [
     "humidifier",
     "fan",
 ]
+
+API_KEY_SELECTOR = selector.TextSelector(
+    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+)
 
 PRICE_SELECTOR = selector.NumberSelector(
     selector.NumberSelectorConfig(
@@ -222,11 +228,43 @@ class SobryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_DISPLAY, default=DEFAULT_DISPLAY): vol.In(DISPLAYS),
                 vol.Required(CONF_GRANULARITY, default=DEFAULT_GRANULARITY): vol.In(GRANULARITIES),
                 vol.Required(CONF_TAX_MODE, default=DEFAULT_TAX_MODE): vol.In(TAX_MODES),
-                vol.Optional(CONF_API_KEY, default=""): str,
+                vol.Optional(CONF_API_KEY): API_KEY_SELECTOR,
             }
         )
 
         return self.async_show_form(step_id="user", data_schema=schema)
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]):
+        """Start over when Sobry refuses the API key."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Ask for a new API key, or none to go back to the public prices."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            return self.async_abort(reason="reauth_failed")
+
+        if user_input is not None:
+            api_key = (user_input.get(CONF_API_KEY) or "").strip()
+            options = dict(entry.options)
+            if CONF_API_KEY in options:
+                # A key set from the options wins over the one given at setup.
+                options[CONF_API_KEY] = api_key
+            changed = self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_API_KEY: api_key}, options=options
+            )
+            # A loaded entry is reloaded by its update listener when it
+            # changes; one that failed to set up has no listener.
+            if not changed or entry.state is not ConfigEntryState.LOADED:
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(entry.entry_id)
+                )
+            return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Optional(CONF_API_KEY): API_KEY_SELECTOR}),
+        )
 
     @staticmethod
     @callback
@@ -312,11 +350,9 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
     async def async_step_settings(self, user_input=None):
         """Edit the pricing settings of the integration."""
         if user_input is not None:
-            api_key = (user_input.get(CONF_API_KEY) or "").strip()
-            if api_key:
-                user_input[CONF_API_KEY] = api_key
-            else:
-                user_input.pop(CONF_API_KEY, None)
+            # Saved even when empty: an empty key in the options overrides the
+            # one given at setup, which is how a key is removed.
+            user_input[CONF_API_KEY] = (user_input.get(CONF_API_KEY) or "").strip()
             return self._save(**user_input)
 
         data = {**self._entry.data, **self._entry.options}
@@ -334,7 +370,12 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
                     default=data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY),
                 ): vol.In(GRANULARITIES),
                 vol.Required(CONF_TAX_MODE, default=data.get(CONF_TAX_MODE, DEFAULT_TAX_MODE)): vol.In(TAX_MODES),
-                vol.Optional(CONF_API_KEY, default=data.get(CONF_API_KEY, "")): str,
+                # A suggestion, not a default: a cleared field must not bring
+                # the previous key back.
+                vol.Optional(
+                    CONF_API_KEY,
+                    description={"suggested_value": data.get(CONF_API_KEY) or None},
+                ): API_KEY_SELECTOR,
             }
         )
         return self.async_show_form(step_id="settings", data_schema=schema)

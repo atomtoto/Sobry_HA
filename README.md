@@ -10,12 +10,13 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
 - Supports Sobry pricing options (`segment`, `turpe`, `profil`, `display`)
 - Supports Sobry API key mode for personalized prices (`/v2/user/daily-prices`)
 - Creates Home Assistant sensors for:
-  - Current price
+  - Current price, which changes on every slot boundary, not only when the
+    API is polled
   - Next price
-  - Minimum price
-  - Maximum price
-  - Average price
-- Exposes full returned price list in `all_prices` attribute of the current price sensor
+  - Minimum, maximum and average price of the current day
+- Exposes today's prices, and tomorrow's once published, in the `all_prices`
+  attribute of the current price sensor (kept out of the recorder history:
+  that list is too large for it)
 - Drives appliances directly from the market price, without writing an automation
   (see [Appliance control](#appliance-control)), with a runtime that can
   [vary over the year](#a-runtime-that-varies), a run that can
@@ -239,19 +240,29 @@ window: they are listed in `slots` and `windows`, and again in `forced_slots`.
 
 ### Notes on the price horizon
 
-A plan only selects slots the API has already published. *Wait for the whole
+A plan only selects slots the API has already published: tomorrow's prices are
+fetched as soon as they are, early in the afternoon, and the forecasts the
+API-key endpoint returns before that are never planned on. *Wait for the whole
 window to be priced* keeps the appliance off until the whole window is known,
 so the cheapest slots are never missed by planning on half a day; the
 `data_complete` and `reason` attributes of the binary sensor tell you when the
-plan is waiting. A window that extends past the published prices — an overnight
-window while only today is priced — waits for them: keep the window inside the
-day, turn that option off to plan on what is known, or set a fallback schedule
-so the appliance runs anyway.
+plan is waiting.
+
+An overnight window such as `22:00` → `06:00` is therefore planned in the
+afternoon, and stays planned after midnight: the prices of the evening before
+are kept. Without an API key they are fetched again on every refresh; with
+one they are kept in memory, so a restart of Home Assistant in the middle of
+the night leaves the rest of that night waiting — set a fallback schedule to
+cover it.
+
+Days on which the clocks change are handled: a 23-hour day is complete with
+23 hours of prices, a 25-hour day with 24 or 25.
 
 ## Notes
 
 - Without API key, the integration keeps using the existing public endpoint mode.
-- Default update interval is 15 minutes.
+- Default update interval is 15 minutes. Each refresh asks for yesterday,
+  today and tomorrow.
 
 ## Sobry API key (personalized prices)
 
@@ -262,8 +273,16 @@ You can set an optional `api_key` in the integration configuration/options flow.
   - Header `Authorization: Bearer <api_key>`
   - No `contractId` query parameter
   - The V2 `date` and `time` response fields (Europe/Paris) to select the
-    current and next prices
+    current and next prices; on the night the clocks go back, the second
+    occurrence of a time is the repeated hour
+  - `days=1`, for today and tomorrow
 - When `api_key` is not set, the integration uses the previous endpoint/behavior.
+
+The key is entered in a masked field. To remove it, clear the field in
+**Configure** → **Pricing settings**: the integration goes back to the public
+prices. When Sobry refuses the key — revoked or expired — Home Assistant asks
+for a new one from **Settings** → **Devices & Services**; leave it empty there
+to go back to the public prices.
 
 The integration also supports v2 parameters internally:
 - `granularity` mapped to `15m` or `1h`

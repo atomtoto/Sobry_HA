@@ -38,6 +38,9 @@ class SobryPlanBinarySensor(SobryPlanEntity, BinarySensorEntity):
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
     _attr_name = None
+    # Up to two days of slots, over the recorder size limit: kept in the state
+    # only, the windows sum them up in the history.
+    _unrecorded_attributes = frozenset({"slots"})
 
     def __init__(self, plan: SobryPlan) -> None:
         """Initialise the main entity of the plan device."""

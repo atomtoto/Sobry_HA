@@ -13,10 +13,19 @@
           "tax_mode": "Tax mode",
           "api_key": "Sobry API key"
         }
+      },
+      "reauth_confirm": {
+        "title": "Sobry API key refused",
+        "description": "Sobry refused the API key: it was revoked or has expired. Enter a new key, or leave the field empty to use the public prices.",
+        "data": {
+          "api_key": "Sobry API key"
+        }
       }
     },
     "abort": {
-      "already_configured": "Sobry Energy is already configured."
+      "already_configured": "Sobry Energy is already configured.",
+      "reauth_successful": "The API key was updated.",
+      "reauth_failed": "The Sobry entry no longer exists."
     }
   },
   "options": {
