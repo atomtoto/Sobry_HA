@@ -277,6 +277,80 @@ class TestPlanning(unittest.TestCase):
         self.assertEqual(result.windows[0].start, _local("2026-01-15T23:00:00"))
         self.assertEqual(result.windows[0].end, _local("2026-01-16T02:00:00"))
 
+    def test_force_price_runs_on_top_of_the_plan(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=2,
+            max_price=0.01,
+            force_price=0.06,
+        )
+        # Nothing is under the maximum price, yet every slot of the period at
+        # or under the force price still runs.
+        self.assertEqual(result.reason, "above_max_price")
+        self.assertEqual(result.planned_windows, [])
+        self.assertEqual(_hours_of(result), [0, 1, 2, 3, 4, 5, 13, 14, 15])
+        self.assertEqual(result.forced, result.selected)
+        self.assertTrue(result.is_active(_local("2026-01-15T13:30:00")))
+        self.assertTrue(result.is_forced(_local("2026-01-15T13:30:00")))
+        self.assertIsNone(result.planned_window(_local("2026-01-15T13:30:00")))
+
+    def test_force_price_adds_to_the_selection(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T00:30:00"),
+            PARIS,
+            hours=2,
+            extra_hours=1,
+            force_price=0.06,
+        )
+        # The plan picks 00:00 -> 02:00, extended to 03:00; the force price
+        # adds the rest of the cheap night and 13:00 -> 16:00, unextended.
+        self.assertEqual(
+            [(window.start, window.end) for window in result.planned_windows],
+            [(_local("2026-01-15T00:00:00"), _local("2026-01-15T03:00:00"))],
+        )
+        self.assertEqual(
+            [(window.start, window.end) for window in result.windows],
+            [
+                (_local("2026-01-15T00:00:00"), _local("2026-01-15T06:00:00")),
+                (_local("2026-01-15T13:00:00"), _local("2026-01-15T16:00:00")),
+            ],
+        )
+        self.assertEqual(
+            sorted(slot.start.astimezone(PARIS).hour for slot in result.forced),
+            [3, 4, 5, 13, 14, 15],
+        )
+        self.assertFalse(result.is_forced(_local("2026-01-15T02:30:00")))
+        self.assertTrue(result.is_forced(_local("2026-01-15T03:30:00")))
+
+    def test_force_price_ignores_the_window_and_missing_prices(self) -> None:
+        # Tonight's window waits for tomorrow's prices, and the runtime is
+        # zero: the cheap afternoon still runs, the morning is over.
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=0,
+            window_start=time(22, 0),
+            window_end=time(6, 0),
+            force_price=0.06,
+        )
+        self.assertEqual(result.reason, "waiting_for_prices")
+        self.assertEqual(result.planned_windows, [])
+        self.assertEqual(_hours_of(result), [13, 14, 15])
+
+    def test_without_force_price_every_window_is_planned(self) -> None:
+        result = planner.build_plan(
+            self.slots,
+            _local("2026-01-15T09:00:00"),
+            PARIS,
+            hours=8,
+        )
+        self.assertEqual(result.forced, [])
+        self.assertEqual(result.planned_windows, result.windows)
+
     def test_quarter_hourly_series(self) -> None:
         prices = [0.4] * 96
         for index in range(8, 16):  # 02:00 -> 04:00

@@ -63,6 +63,7 @@
           "fallback_end": "Fin du repli",
           "max_price": "Prix maximum",
           "threshold_price": "Prix seuil",
+          "force_price": "Toujours lancer sous ce prix",
           "require_complete_data": "Attendre que toute la plage soit tarifée"
         },
         "data_description": {
@@ -78,6 +79,7 @@
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
           "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
           "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
+          "force_price": "Facultatif. Quels que soient le mode, la plage, la durée ou le prix maximum, l'appareil fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur. Indiquez 0 pour profiter des prix nuls et négatifs, laissez vide pour désactiver.",
           "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
           "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
@@ -107,6 +109,7 @@
           "fallback_end": "Fin du repli",
           "max_price": "Prix maximum",
           "threshold_price": "Prix seuil",
+          "force_price": "Toujours lancer sous ce prix",
           "require_complete_data": "Attendre que toute la plage soit tarifée"
         },
         "data_description": {
@@ -122,6 +125,7 @@
           "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
           "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
           "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
+          "force_price": "Facultatif. Quels que soient le mode, la plage, la durée ou le prix maximum, l'appareil fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur. Indiquez 0 pour profiter des prix nuls et négatifs, laissez vide pour désactiver.",
           "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
           "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
@@ -241,6 +245,10 @@
         "threshold_price": {
           "name": "Prix seuil",
           "description": "Prix sous lequel les créneaux sont retenus, pour le mode seuil."
+        },
+        "force_price": {
+          "name": "Toujours lancer sous",
+          "description": "Retenir aussi chaque créneau dont le prix est inférieur ou égal à cette valeur, quels que soient la plage, la durée ou le prix maximum."
         },
         "require_complete_data": {
           "name": "Exiger des prix complets",

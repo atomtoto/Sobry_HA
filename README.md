@@ -20,7 +20,8 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
   (see [Appliance control](#appliance-control)), with a runtime that can
   [vary over the year](#a-runtime-that-varies), a run that can
   [finish its cycle](#finishing-the-cycle) on the appliance's own consumption,
-  and a fixed-schedule [safety net](#safety-net) when prices cannot be fetched
+  a price under which it [always runs](#always-run-below-a-price), and a
+  fixed-schedule [safety net](#safety-net) when prices cannot be fetched
 
 ## Installation
 
@@ -64,6 +65,7 @@ needs a helper entity and an automation.
 | Window start / end | Daily window the slots are picked in. Same start and end means a full day |
 | Maximum price | Optional cap: a slot above it is never selected, even if hours are missing |
 | Price threshold | Used by the threshold mode |
+| Always run below this price | Optional. Every slot at or under it runs on top of the plan, whatever the mode, window, runtime or maximum price. See [Always run below a price](#always-run-below-a-price) |
 | Fallback start / end | Optional fixed schedule, used whenever the plan cannot decide. See [Safety net](#safety-net) |
 | Wait for the whole window to be priced | Keeps the appliance off until every price of the window is published |
 
@@ -84,6 +86,29 @@ a water heater with no temperature reading gets its 8 cheap hours plus, say, one
 more hour, to be sure it finished heating. The extension applies once per
 window, after the last selected slot, and holds even when the price series
 stops before its end.
+
+### Always run below a price
+
+Whatever the plan decided, some prices are too good to miss: a free or negative
+price on a sunny afternoon is worth heating the water for, even when the plan
+already scheduled its 8 hours tonight. Set *Always run below this price* — `0`
+to catch every free and negative price — and the appliance also runs during
+every slot priced at or under it.
+
+- It comes on top of every other rule: whatever the selection mode, the daily
+  window, the runtime (even `0`, or a month set to `0`), the maximum price, or
+  a window still waiting for its prices.
+- It also runs on top of the [safety net](#safety-net): a forced slot never
+  stops the fixed schedule, and never hides that the plan is blind.
+- A forced run is a bonus, not the run the appliance needs: it is neither
+  extended by the *extra runtime* nor held on by the consumption.
+- Leave it empty to disable it. The *Automatic control* switch still wins:
+  when it is off, the appliance is left alone.
+
+While a slot runs for its price alone, the binary sensor carries
+`force_active: true`, next to `force_price`. Forced slots are listed with the
+others in `slots` and `windows`, and count in the planned hours and the
+planned average price.
 
 ### Finishing the cycle
 
@@ -209,6 +234,8 @@ response_variable: cheapest
 
 The response holds `slots`, `windows`, `period_start`, `period_end`,
 `planned_hours`, `average_price`, `next_start`, `active` and `data_complete`.
+Pass `force_price` to add every slot at or under that price, whatever the
+window: they are listed in `slots` and `windows`, and again in `forced_slots`.
 
 ### Notes on the price horizon
 

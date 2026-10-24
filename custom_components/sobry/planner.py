@@ -114,6 +114,11 @@ class PlanResult:
     data_complete: bool = False
     candidate_count: int = 0
     reason: str | None = None
+    # ``selected`` and ``windows`` hold every run. The slots run only because
+    # they are priced under the force price, and the windows the plan decided
+    # on its own, are also kept apart.
+    forced: list[PriceSlot] = field(default_factory=list)
+    planned_windows: list[PlanWindow] = field(default_factory=list)
 
     @property
     def selected_hours(self) -> float:
@@ -140,6 +145,16 @@ class PlanResult:
     def current_window(self, moment: datetime) -> PlanWindow | None:
         """Return the running window containing ``moment``, if any."""
         return next((window for window in self.windows if window.contains(moment)), None)
+
+    def planned_window(self, moment: datetime) -> PlanWindow | None:
+        """Return the window the plan decided on containing ``moment``, if any."""
+        return next(
+            (window for window in self.planned_windows if window.contains(moment)), None
+        )
+
+    def is_forced(self, moment: datetime) -> bool:
+        """Return True when ``moment`` falls in a slot run for its price alone."""
+        return any(slot.contains(moment) for slot in self.forced)
 
     def next_window(self, moment: datetime) -> PlanWindow | None:
         """Return the first window starting after ``moment``."""
@@ -315,6 +330,31 @@ def extend_last_window(
         result.windows[-1] = PlanWindow(last.start, extension_end, last.price)
 
 
+def add_forced_slots(
+    result: PlanResult,
+    slots: list[PriceSlot],
+    force_price: float,
+    since: datetime,
+) -> None:
+    """Run the device during every slot priced at or under ``force_price``.
+
+    The forced slots come on top of the plan, whatever its window, runtime or
+    maximum price. They are not extended: a run the price imposes is a bonus,
+    not the run the device needs.
+    """
+    selected = set(result.selected)
+    forced = [
+        slot
+        for slot in slots
+        if slot.end > since and slot.price <= force_price and slot not in selected
+    ]
+    if not forced:
+        return
+    result.forced = forced
+    result.selected = sorted(selected.union(forced), key=lambda slot: slot.start)
+    result.windows = merge_overlapping(result.windows + merge_windows(forced))
+
+
 def _cheapest_slots(candidates: list[PriceSlot], hours: float) -> list[PriceSlot]:
     """Return the cheapest slots adding up to ``hours``, in any order."""
     selected: list[PriceSlot] = []
@@ -394,12 +434,16 @@ def build_plan(
     threshold_price: float | None = None,
     extra_hours: float = 0.0,
     require_complete_data: bool = True,
+    force_price: float | None = None,
 ) -> PlanResult:
     """Plan when a device should run, for the current window occurrence.
 
     When the price series already covers the next occurrence of the window in
     full, that occurrence is planned as well so the entities can advertise the
     next start beyond the end of the current period.
+
+    Every known slot priced at or under ``force_price`` is added on top, from
+    the start of the current period or from now, whichever comes first.
     """
     period_start, period_end = period_bounds(moment, window_start, window_end, tz)
     result = _plan_period(
@@ -434,6 +478,9 @@ def build_plan(
             )
             result.windows = merge_overlapping(result.windows + upcoming.windows)
 
+    result.planned_windows = list(result.windows)
+    if force_price is not None:
+        add_forced_slots(result, slots, force_price, min(period_start, moment))
     return result
 
 

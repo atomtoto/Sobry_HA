@@ -27,6 +27,7 @@ from .const import (
     CONF_EXTRA_HOURS,
     CONF_FALLBACK_END,
     CONF_FALLBACK_START,
+    CONF_FORCE_PRICE,
     CONF_HOURS,
     CONF_HOURS_BY_MONTH,
     CONF_HOURS_ENTITY,
@@ -61,7 +62,14 @@ from .const import (
     NAME,
 )
 from .coordinator import SobryDataUpdateCoordinator
-from .planner import PlanResult, PlanWindow, build_plan, period_bounds
+from .planner import (
+    PlanResult,
+    PlanWindow,
+    build_plan,
+    merge_overlapping,
+    merge_windows,
+    period_bounds,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -142,6 +150,8 @@ class SobryPlan:
         self.window_start = parse_time(config.get(CONF_WINDOW_START), DEFAULT_WINDOW_START)
         self.window_end = parse_time(config.get(CONF_WINDOW_END), DEFAULT_WINDOW_END)
         self.max_price = _as_float(config.get(CONF_MAX_PRICE))
+        # Slots at or under that price run the appliance whatever the plan says.
+        self.force_price = _as_float(config.get(CONF_FORCE_PRICE))
         # Runtime sources, in order of precedence: an entity, the month of the
         # period, then the runtime configured on the plan.
         self.hours_entity: str | None = config.get(CONF_HOURS_ENTITY) or None
@@ -181,6 +191,7 @@ class SobryPlan:
         self._last_hours_error: str | None = None
         self._fallback_active = False
         self._fallback_window: tuple[datetime, datetime] | None = None
+        self._forced = False
         self._holding = False
         self._hold_deadline: datetime | None = None
         self._power_below_since: datetime | None = None
@@ -352,6 +363,7 @@ class SobryPlan:
                 threshold_price=self._threshold_price,
                 extra_hours=self.extra_hours,
                 require_complete_data=self.require_complete_data,
+                force_price=self.force_price,
             )
             if slots
             else None
@@ -359,6 +371,7 @@ class SobryPlan:
 
         self._fallback_window = None
         self._fallback_active = False
+        self._forced = self.result is not None and self.result.is_forced(moment)
 
         if self.has_fallback and self._is_blind(moment):
             assert self.fallback_start is not None and self.fallback_end is not None
@@ -371,10 +384,15 @@ class SobryPlan:
         elif self.result is None:
             self._active = None
         else:
-            self._active = self.result.is_active(moment)
+            self._active = self.result.planned_window(moment) is not None
 
         if self.has_power_hold and self._active is not None:
             self._active = self._apply_power_hold(moment, self._active)
+
+        if self._forced:
+            # The force price runs the appliance on top of the plan, and of
+            # the fixed schedule. Being a bonus, it never arms the power hold.
+            self._active = True
 
     def _apply_power_hold(self, moment: datetime, planned: bool) -> bool:
         """Extend the run past the planned window while power stays high.
@@ -421,7 +439,7 @@ class SobryPlan:
         if self._fallback_window is not None:
             return self._fallback_window[1]
         if self.result is not None:
-            window = self.result.current_window(moment)
+            window = self.result.planned_window(moment)
             if window is not None:
                 return window.end
         return moment
@@ -522,9 +540,11 @@ class SobryPlan:
             return False
         if self.result is None:
             return True
-        if self.result.is_active(moment):
+        # Slots run for their price alone do not make a schedule: the plan
+        # is still blind when they are all it has.
+        if self.result.planned_window(moment) is not None:
             return False
-        if not self.result.windows:
+        if not self.result.planned_windows:
             return True
         # Prices that do not cover the current moment cannot be trusted.
         return not any(slot.contains(moment) for slot in self.coordinator.price_slots)
@@ -582,16 +602,20 @@ class SobryPlan:
 
     # -- Presentation -----------------------------------------------------
 
+    def _windows(self) -> list[PlanWindow]:
+        """Return every run of the appliance, the forced ones included."""
+        if self._fallback_window is None:
+            return self.result.windows if self.result is not None else []
+        # The fixed schedule stands in for the plan, not for the slots the
+        # force price runs on top of it.
+        forced = merge_windows(self.result.forced) if self.result is not None else []
+        return merge_overlapping([PlanWindow(*self._fallback_window, 0.0), *forced])
+
     @property
     def next_start(self) -> datetime | None:
         """Return the start of the next planned run."""
         now = dt_util.utcnow()
-        if self._fallback_window is not None:
-            start = self._fallback_window[0]
-            return start if start > now else None
-        if self.result is None:
-            return None
-        window = self.result.next_window(now)
+        window = next((window for window in self._windows() if window.start > now), None)
         return window.start if window else None
 
     @property
@@ -602,14 +626,10 @@ class SobryPlan:
             # The appliance stops when its consumption drops, at the latest
             # on the deadline.
             return self._hold_deadline
-        if self._fallback_window is not None:
-            return self._fallback_window[1]
-        if self.result is None:
-            return None
-        current = self.result.current_window(now)
-        if current is not None:
-            return current.end
-        window = self.result.next_window(now)
+        windows = self._windows()
+        window = next((window for window in windows if window.contains(now)), None)
+        if window is None:
+            window = next((window for window in windows if window.start > now), None)
         return window.end if window else None
 
     @property
@@ -657,19 +677,26 @@ class SobryPlan:
             attributes["threshold_price"] = self._threshold_price
         else:
             attributes["max_price"] = self.max_price
+        if self.force_price is not None:
+            attributes["force_price"] = self.force_price
+            attributes["force_active"] = self._forced
 
         if self._fallback_window is not None:
-            # The fixed schedule is in charge: report it as the planned window.
-            fallback = PlanWindow(*self._fallback_window, 0.0)
-            attributes["planned_hours"] = round(fallback.hours, 3)
+            # The fixed schedule is in charge: report it as the planned window,
+            # along with the slots the force price runs on top of it.
+            windows = self._windows()
+            attributes["planned_hours"] = round(sum(window.hours for window in windows), 3)
             attributes["planned_average_price"] = None
-            attributes["slots"] = []
+            attributes["slots"] = (
+                [slot.as_dict(tz) for slot in self.result.forced] if self.result else []
+            )
             attributes["windows"] = [
                 {
-                    "start": fallback.start.astimezone(tz).isoformat(),
-                    "end": fallback.end.astimezone(tz).isoformat(),
-                    "hours": round(fallback.hours, 3),
+                    "start": window.start.astimezone(tz).isoformat(),
+                    "end": window.end.astimezone(tz).isoformat(),
+                    "hours": round(window.hours, 3),
                 }
+                for window in windows
             ]
         elif self.result is not None:
             attributes["planned_hours"] = round(self.result.scheduled_hours, 3)
