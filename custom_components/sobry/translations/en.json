@@ -5,7 +5,13 @@
         "title": "Sobry Energy",
         "description": "Configure Sobry V2 electricity prices.",
         "data": {
-          "segment": "Segment",
+          "segment": "Contract segment"
+        }
+      },
+      "user_details": {
+        "title": "Sobry Energy",
+        "description": "Choose the pricing settings for this contract segment.",
+        "data": {
           "turpe": "TURPE option",
           "profil": "Profile",
           "display": "Display",
@@ -44,7 +50,13 @@
       "settings": {
         "title": "Pricing settings",
         "data": {
-          "segment": "Segment",
+          "segment": "Contract segment"
+        }
+      },
+      "settings_details": {
+        "title": "Pricing settings",
+        "description": "Only settings that apply to the selected contract segment are shown.",
+        "data": {
           "turpe": "TURPE option",
           "profil": "Profile",
           "display": "Display",
@@ -142,6 +154,59 @@
           "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
           "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
           "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
+        }
+      },
+      "plan_pricing": {
+        "title": "Price rules",
+        "description": "Choose the price limits used by this appliance. Only settings that apply to the selected mode are shown.",
+        "data": {
+          "max_price": "Maximum price",
+          "threshold_price": "Price threshold",
+          "force_price": "Always run below this price"
+        },
+        "data_description": {
+          "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
+          "threshold_price": "Slots at or below this price are selected. This is used only by the threshold mode.",
+          "force_price": "Optional. Also run during every slot priced at or below this value, whatever the mode, window or runtime."
+        }
+      },
+      "plan_force": {
+        "title": "Force-price exception",
+        "description": "This rule runs the appliance whenever the price is low enough, in addition to the selected schedule.",
+        "data": {
+          "force_skip_negative": "Ignore this rule on days with a negative price"
+        },
+        "data_description": {
+          "force_skip_negative": "On days with a negative price, only the slots selected by the plan run."
+        }
+      },
+      "plan_power": {
+        "title": "Power-based extension",
+        "description": "Optionally keep the appliance running while its power sensor shows that it is still heating or consuming.",
+        "data": {
+          "power_entity": "Power entity"
+        },
+        "data_description": {
+          "power_entity": "Leave empty to disable power-based extension."
+        }
+      },
+      "plan_power_settings": {
+        "title": "Power-based extension limits",
+        "data": {
+          "power_threshold": "Power above which the appliance continues",
+          "power_hold_max": "Maximum hold"
+        },
+        "data_description": {
+          "power_threshold": "Consumption under which the appliance is considered done, in watts.",
+          "power_hold_max": "The extension never lasts longer than this after the last planned window."
+        }
+      },
+      "plan_fallback": {
+        "title": "Fallback schedule",
+        "description": "Optionally use fixed hours when prices are unavailable or the plan cannot fill its window. Leave both fields empty to disable it.",
+        "data": {
+          "fallback_start": "Fallback start",
+          "fallback_end": "Fallback end"
         }
       },
       "monthly_hours": {

@@ -62,6 +62,7 @@ from .const import (
     MAX_POWER_THRESHOLD,
     MAX_PRICE_LIMIT,
     MODE_CHEAPEST_SLOTS,
+    MODE_THRESHOLD,
     NAME,
     PLAN_MODES,
 )
@@ -100,8 +101,8 @@ PRICE_SELECTOR = selector.NumberSelector(
 )
 
 
-def _plan_schema() -> vol.Schema:
-    """Return the schema describing a device control plan."""
+def _plan_core_schema() -> vol.Schema:
+    """Return the schema for the general plan settings."""
     return vol.Schema(
         {
             vol.Required(CONF_NAME): selector.TextSelector(),
@@ -138,11 +139,54 @@ def _plan_schema() -> vol.Schema:
                     unit_of_measurement="h",
                 )
             ),
+            vol.Required(CONF_WINDOW_START, default=DEFAULT_WINDOW_START): selector.TimeSelector(),
+            vol.Required(CONF_WINDOW_END, default=DEFAULT_WINDOW_END): selector.TimeSelector(),
+            vol.Required(
+                CONF_REQUIRE_COMPLETE_DATA, default=DEFAULT_REQUIRE_COMPLETE_DATA
+            ): selector.BooleanSelector(),
+        }
+    )
+
+
+def _plan_pricing_schema(mode: str) -> vol.Schema:
+    """Return the price settings relevant to the selected mode."""
+    fields: dict[Any, Any] = {
+        vol.Optional(CONF_MAX_PRICE): PRICE_SELECTOR,
+        vol.Optional(CONF_FORCE_PRICE): PRICE_SELECTOR,
+    }
+    if mode == MODE_THRESHOLD:
+        fields[vol.Required(CONF_THRESHOLD_PRICE, default=DEFAULT_THRESHOLD_PRICE)] = (
+            PRICE_SELECTOR
+        )
+    return vol.Schema(fields)
+
+
+def _plan_force_schema() -> vol.Schema:
+    """Return the settings for an enabled force price."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_FORCE_SKIP_NEGATIVE, default=False): selector.BooleanSelector(),
+        }
+    )
+
+
+def _plan_power_schema() -> vol.Schema:
+    """Return the optional power tracking entity."""
+    return vol.Schema(
+        {
             vol.Optional(CONF_POWER_ENTITY): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["sensor", "input_number", "number"]
                 )
             ),
+        }
+    )
+
+
+def _plan_power_settings_schema() -> vol.Schema:
+    """Return settings for an enabled power tracking entity."""
+    return vol.Schema(
+        {
             vol.Required(
                 CONF_POWER_THRESHOLD, default=DEFAULT_POWER_THRESHOLD
             ): selector.NumberSelector(
@@ -165,19 +209,16 @@ def _plan_schema() -> vol.Schema:
                     unit_of_measurement="h",
                 )
             ),
-            vol.Required(CONF_WINDOW_START, default=DEFAULT_WINDOW_START): selector.TimeSelector(),
-            vol.Required(CONF_WINDOW_END, default=DEFAULT_WINDOW_END): selector.TimeSelector(),
-            vol.Optional(CONF_MAX_PRICE): PRICE_SELECTOR,
-            vol.Required(
-                CONF_THRESHOLD_PRICE, default=DEFAULT_THRESHOLD_PRICE
-            ): PRICE_SELECTOR,
-            vol.Optional(CONF_FORCE_PRICE): PRICE_SELECTOR,
-            vol.Required(CONF_FORCE_SKIP_NEGATIVE, default=False): selector.BooleanSelector(),
+        }
+    )
+
+
+def _plan_fallback_schema() -> vol.Schema:
+    """Return the optional fixed fallback schedule."""
+    return vol.Schema(
+        {
             vol.Optional(CONF_FALLBACK_START): selector.TimeSelector(),
             vol.Optional(CONF_FALLBACK_END): selector.TimeSelector(),
-            vol.Required(
-                CONF_REQUIRE_COMPLETE_DATA, default=DEFAULT_REQUIRE_COMPLETE_DATA
-            ): selector.BooleanSelector(),
         }
     )
 
@@ -203,9 +244,29 @@ class SobryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialize the flow state."""
+        self._user_input: dict[str, Any] = {}
+
     async def async_step_user(self, user_input=None):
-        """Handle the initial step."""
+        """Choose the contract segment."""
         if user_input is not None:
+            self._user_input = dict(user_input)
+            return await self.async_step_user_details()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SEGMENT, default=DEFAULT_SEGMENT): vol.In(SEGMENTS),
+            }
+        )
+        return self.async_show_form(step_id="user", data_schema=schema)
+
+    async def async_step_user_details(self, user_input=None):
+        """Choose settings available for the selected segment."""
+        segment = self._user_input.get(CONF_SEGMENT, DEFAULT_SEGMENT)
+        if user_input is not None:
+            self._user_input.update(user_input)
+            user_input = self._user_input
             api_key = (user_input.get(CONF_API_KEY) or "").strip()
             if api_key:
                 user_input[CONF_API_KEY] = api_key
@@ -222,19 +283,30 @@ class SobryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title=NAME, data=user_input)
 
+        fields: dict[Any, Any] = {
+            vol.Required(CONF_TURPE, default=DEFAULT_TURPE): vol.In(
+                TURPE_C4 if segment == "C4" else TURPE_C5
+            ),
+            vol.Required(
+                CONF_GRANULARITY, default=DEFAULT_GRANULARITY
+            ): vol.In(GRANULARITIES),
+            vol.Required(CONF_TAX_MODE, default=DEFAULT_TAX_MODE): vol.In(TAX_MODES),
+            vol.Optional(CONF_API_KEY): API_KEY_SELECTOR,
+        }
+        if segment != "C4":
+            fields.update(
+                {
+                    vol.Required(CONF_PROFIL, default=DEFAULT_PROFIL): vol.In(PROFILS),
+                    vol.Required(CONF_DISPLAY, default=DEFAULT_DISPLAY): vol.In(
+                        DISPLAYS
+                    ),
+                }
+            )
         schema = vol.Schema(
-            {
-                vol.Required(CONF_SEGMENT, default=DEFAULT_SEGMENT): vol.In(SEGMENTS),
-                vol.Required(CONF_TURPE, default=DEFAULT_TURPE): vol.In(TURPE_C5),
-                vol.Required(CONF_PROFIL, default=DEFAULT_PROFIL): vol.In(PROFILS),
-                vol.Required(CONF_DISPLAY, default=DEFAULT_DISPLAY): vol.In(DISPLAYS),
-                vol.Required(CONF_GRANULARITY, default=DEFAULT_GRANULARITY): vol.In(GRANULARITIES),
-                vol.Required(CONF_TAX_MODE, default=DEFAULT_TAX_MODE): vol.In(TAX_MODES),
-                vol.Optional(CONF_API_KEY): API_KEY_SELECTOR,
-            }
+            fields
         )
 
-        return self.async_show_form(step_id="user", data_schema=schema)
+        return self.async_show_form(step_id="user_details", data_schema=schema)
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]):
         """Start over when Sobry refuses the API key."""
@@ -282,6 +354,8 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         # deprecated in recent Home Assistant releases.
         self._entry = config_entry
         self._plan_id: str | None = None
+        self._plan_input: dict[str, Any] = {}
+        self._settings_input: dict[str, Any] = {}
 
     # -- Helpers ----------------------------------------------------------
 
@@ -307,6 +381,14 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         plan[CONF_REQUIRE_COMPLETE_DATA] = bool(
             user_input.get(CONF_REQUIRE_COMPLETE_DATA, DEFAULT_REQUIRE_COMPLETE_DATA)
         )
+        if plan.get(CONF_MODE) != MODE_THRESHOLD:
+            plan.pop(CONF_THRESHOLD_PRICE, None)
+        if plan.get(CONF_FORCE_PRICE) is None:
+            plan.pop(CONF_FORCE_SKIP_NEGATIVE, None)
+        if not plan.get(CONF_POWER_ENTITY):
+            plan.pop(CONF_POWER_ENTITY, None)
+            plan.pop(CONF_POWER_THRESHOLD, None)
+            plan.pop(CONF_POWER_HOLD_MAX, None)
         # The per month runtimes live in their own step: editing a plan must
         # not drop them.
         if previous and previous.get(CONF_HOURS_BY_MONTH):
@@ -350,53 +432,93 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_menu(step_id="init", menu_options=menu_options)
 
     async def async_step_settings(self, user_input=None):
-        """Edit the pricing settings of the integration."""
+        """Choose the contract segment before showing its settings."""
         if user_input is not None:
+            self._settings_input = dict(user_input)
+            return await self.async_step_settings_details()
+
+        data = {**self._entry.data, **self._entry.options}
+        return self.async_show_form(
+            step_id="settings",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SEGMENT,
+                        default=data.get(CONF_SEGMENT, DEFAULT_SEGMENT),
+                    ): vol.In(SEGMENTS),
+                }
+            ),
+        )
+
+    async def async_step_settings_details(self, user_input=None):
+        """Edit settings available for the selected contract segment."""
+        data = {**self._entry.data, **self._entry.options}
+        segment = self._settings_input.get(
+            CONF_SEGMENT, data.get(CONF_SEGMENT, DEFAULT_SEGMENT)
+        )
+        if user_input is not None:
+            self._settings_input.update(user_input)
+            user_input = self._settings_input
             # Saved even when empty: an empty key in the options overrides the
             # one given at setup, which is how a key is removed.
             user_input[CONF_API_KEY] = (user_input.get(CONF_API_KEY) or "").strip()
+            if segment == "C4":
+                if user_input[CONF_TURPE] not in TURPE_C4:
+                    user_input[CONF_TURPE] = "CU"
+                user_input[CONF_PROFIL] = "pro"
+                user_input[CONF_DISPLAY] = "HT"
             return self._save(**user_input)
 
-        data = {**self._entry.data, **self._entry.options}
-        segment = data.get(CONF_SEGMENT, DEFAULT_SEGMENT)
         turpe_options = TURPE_C4 if segment == "C4" else TURPE_C5
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_SEGMENT, default=segment): vol.In(SEGMENTS),
-                vol.Required(CONF_TURPE, default=data.get(CONF_TURPE, DEFAULT_TURPE)): vol.In(turpe_options),
-                vol.Required(CONF_PROFIL, default=data.get(CONF_PROFIL, DEFAULT_PROFIL)): vol.In(PROFILS),
-                vol.Required(CONF_DISPLAY, default=data.get(CONF_DISPLAY, DEFAULT_DISPLAY)): vol.In(DISPLAYS),
-                vol.Required(
-                    CONF_GRANULARITY,
-                    default=data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY),
-                ): vol.In(GRANULARITIES),
-                vol.Required(CONF_TAX_MODE, default=data.get(CONF_TAX_MODE, DEFAULT_TAX_MODE)): vol.In(TAX_MODES),
-                # A suggestion, not a default: a cleared field must not bring
-                # the previous key back.
-                vol.Optional(
-                    CONF_API_KEY,
-                    description={"suggested_value": data.get(CONF_API_KEY) or None},
-                ): API_KEY_SELECTOR,
-            }
+        fields: dict[Any, Any] = {
+            vol.Required(
+                CONF_TURPE, default=data.get(CONF_TURPE, DEFAULT_TURPE)
+            ): vol.In(turpe_options),
+            vol.Required(
+                CONF_GRANULARITY,
+                default=data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY),
+            ): vol.In(GRANULARITIES),
+            vol.Required(
+                CONF_TAX_MODE, default=data.get(CONF_TAX_MODE, DEFAULT_TAX_MODE)
+            ): vol.In(TAX_MODES),
+            # A suggestion, not a default: a cleared field must not bring
+            # the previous key back.
+            vol.Optional(
+                CONF_API_KEY,
+                description={"suggested_value": data.get(CONF_API_KEY) or None},
+            ): API_KEY_SELECTOR,
+        }
+        if segment != "C4":
+            fields.update(
+                {
+                    vol.Required(
+                        CONF_PROFIL, default=data.get(CONF_PROFIL, DEFAULT_PROFIL)
+                    ): vol.In(PROFILS),
+                    vol.Required(
+                        CONF_DISPLAY, default=data.get(CONF_DISPLAY, DEFAULT_DISPLAY)
+                    ): vol.In(DISPLAYS),
+                }
+            )
+        return self.async_show_form(
+            step_id="settings_details", data_schema=vol.Schema(fields)
         )
-        return self.async_show_form(step_id="settings", data_schema=schema)
 
     async def async_step_add_plan(self, user_input=None):
-        """Create a device control plan."""
+        """Set the general settings for a new device control plan."""
         errors: dict[str, str] = {}
         if user_input is not None:
             if not str(user_input.get(CONF_NAME, "")).strip():
                 errors[CONF_NAME] = "name_required"
             else:
-                plans = self._plans
-                plans.append(self._clean_plan(user_input, uuid.uuid4().hex))
-                return self._save(**{CONF_PLANS: plans})
+                self._plan_id = uuid.uuid4().hex
+                self._plan_input = dict(user_input)
+                return await self.async_step_plan_pricing()
 
         return self.async_show_form(
             step_id="add_plan",
             data_schema=self.add_suggested_values_to_schema(
-                _plan_schema(), user_input or {}
+                _plan_core_schema(), user_input or {}
             ),
             errors=errors,
         )
@@ -405,11 +527,12 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
         """Pick the plan to edit."""
         if user_input is not None:
             self._plan_id = user_input[CONF_PLAN_ID]
+            self._plan_input = {}
             return await self.async_step_plan_settings()
         return self._plan_picker("edit_plan")
 
     async def async_step_plan_settings(self, user_input=None):
-        """Edit the selected plan."""
+        """Set the general settings for the selected plan."""
         plans = self._plans
         current = self._plan_by_id()
         if current is None:
@@ -420,22 +543,112 @@ class SobryOptionsFlow(config_entries.OptionsFlow):
             if not str(user_input.get(CONF_NAME, "")).strip():
                 errors[CONF_NAME] = "name_required"
             else:
-                updated = self._clean_plan(
-                    user_input, current[CONF_PLAN_ID], previous=current
-                )
-                plans = [
-                    updated if plan[CONF_PLAN_ID] == current[CONF_PLAN_ID] else plan
-                    for plan in plans
-                ]
-                return self._save(**{CONF_PLANS: plans})
+                self._plan_input = dict(user_input)
+                return await self.async_step_plan_pricing()
 
         return self.async_show_form(
             step_id="plan_settings",
             data_schema=self.add_suggested_values_to_schema(
-                _plan_schema(), user_input or current
+                _plan_core_schema(), user_input or current
             ),
             errors=errors,
             description_placeholders={"name": current.get(CONF_NAME, "")},
+        )
+
+    async def async_step_plan_pricing(self, user_input=None):
+        """Set only the price limits relevant to the selected mode."""
+        current = self._plan_by_id() or {}
+        mode = self._plan_input.get(
+            CONF_MODE, current.get(CONF_MODE, MODE_CHEAPEST_SLOTS)
+        )
+        if user_input is not None:
+            self._plan_input.update(user_input)
+            if user_input.get(CONF_FORCE_PRICE) not in (None, ""):
+                return await self.async_step_plan_force()
+            return await self.async_step_plan_power()
+
+        suggested = {
+            key: current[key]
+            for key in (CONF_MAX_PRICE, CONF_THRESHOLD_PRICE, CONF_FORCE_PRICE)
+            if key in current
+        }
+        return self.async_show_form(
+            step_id="plan_pricing",
+            data_schema=self.add_suggested_values_to_schema(
+                _plan_pricing_schema(mode), suggested
+            ),
+        )
+
+    async def async_step_plan_force(self, user_input=None):
+        """Configure the optional force-price exception."""
+        current = self._plan_by_id() or {}
+        if user_input is not None:
+            self._plan_input.update(user_input)
+            return await self.async_step_plan_power()
+
+        return self.async_show_form(
+            step_id="plan_force",
+            data_schema=self.add_suggested_values_to_schema(
+                _plan_force_schema(), current
+            ),
+        )
+
+    async def async_step_plan_power(self, user_input=None):
+        """Choose whether power consumption should extend the schedule."""
+        current = self._plan_by_id() or {}
+        if user_input is not None:
+            self._plan_input.update(user_input)
+            if user_input.get(CONF_POWER_ENTITY):
+                return await self.async_step_plan_power_settings()
+            return await self.async_step_plan_fallback()
+
+        return self.async_show_form(
+            step_id="plan_power",
+            data_schema=self.add_suggested_values_to_schema(
+                _plan_power_schema(), current
+            ),
+        )
+
+    async def async_step_plan_power_settings(self, user_input=None):
+        """Configure the thresholds for power-based schedule extension."""
+        current = self._plan_by_id() or {}
+        if user_input is not None:
+            self._plan_input.update(user_input)
+            return await self.async_step_plan_fallback()
+
+        return self.async_show_form(
+            step_id="plan_power_settings",
+            data_schema=self.add_suggested_values_to_schema(
+                _plan_power_settings_schema(), current
+            ),
+        )
+
+    async def async_step_plan_fallback(self, user_input=None):
+        """Configure the optional fixed fallback schedule and save the plan."""
+        current = self._plan_by_id() or {}
+        if user_input is not None:
+            self._plan_input.update(user_input)
+            updated = self._clean_plan(
+                self._plan_input,
+                self._plan_id or current.get(CONF_PLAN_ID, uuid.uuid4().hex),
+                previous=current,
+            )
+            plans = self._plans
+            if current:
+                plans = [
+                    updated if plan[CONF_PLAN_ID] == current[CONF_PLAN_ID] else plan
+                    for plan in plans
+                ]
+            else:
+                plans.append(updated)
+            self._plan_input = {}
+            return self._save(**{CONF_PLANS: plans})
+
+        return self.async_show_form(
+            step_id="plan_fallback",
+            data_schema=self.add_suggested_values_to_schema(
+                _plan_fallback_schema(), current
+            ),
         )
 
     async def async_step_monthly_hours(self, user_input=None):
