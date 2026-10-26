@@ -1,17 +1,38 @@
 {
   "config": {
     "step": {
-      "user": {
+      "source": {
         "title": "Sobry Energy",
-        "description": "Configurez les prix de l'électricité Sobry V2.",
+        "description": "D'où viennent les prix de l'électricité ? Seuls les réglages utiles à votre choix sont demandés ensuite.",
         "data": {
-          "segment": "Segment",
+          "price_source": "Prix"
+        }
+      },
+      "public": {
+        "title": "Prix publics",
+        "description": "Choisissez les options tarifaires de votre contrat, indiquées sur votre facture.",
+        "data": {
           "turpe": "Option TURPE",
-          "profil": "Profil",
-          "display": "Affichage",
-          "granularity": "Granularité",
-          "tax_mode": "Mode de taxation",
-          "api_key": "Clé API Sobry"
+          "profil": "Type de client",
+          "display": "Prix",
+          "granularity": "Pas des prix"
+        },
+        "data_description": {
+          "turpe": "Option tarifaire d'acheminement (réseau) de votre contrat.",
+          "granularity": "Le quart d'heure suit au plus près le prix du marché."
+        }
+      },
+      "api_key": {
+        "title": "Vos prix Sobry",
+        "description": "Les prix de votre propre contrat Sobry. La clé est vérifiée auprès de Sobry avant d'être enregistrée.",
+        "data": {
+          "api_key": "Clé API Sobry",
+          "tax_mode": "Prix",
+          "granularity": "Pas des prix"
+        },
+        "data_description": {
+          "api_key": "Clé personnelle de votre compte Sobry. Pour revenir aux prix publics plus tard, choisissez-les dans Configurer.",
+          "granularity": "Le quart d'heure suit au plus près le prix du marché."
         }
       },
       "reauth_confirm": {
@@ -22,6 +43,10 @@
         }
       }
     },
+    "error": {
+      "invalid_api_key": "Sobry a refusé cette clé API : vérifiez-la ou créez-en une nouvelle.",
+      "cannot_connect": "Impossible de joindre Sobry pour vérifier la clé. Réessayez dans un instant."
+    },
     "abort": {
       "already_configured": "Sobry Energy est déjà configuré.",
       "reauth_successful": "La clé API a été mise à jour.",
@@ -30,161 +55,229 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Options Sobry",
-        "description": "Modifiez les paramètres tarifaires ou gérez les appareils pilotés par le prix du marché.",
-        "menu_options": {
-          "settings": "Paramètres tarifaires",
-          "add_plan": "Ajouter un appareil",
-          "edit_plan": "Modifier un appareil",
-          "monthly_hours": "Durée par mois",
-          "remove_plan": "Supprimer un appareil"
-        }
-      },
-      "settings": {
+      "source": {
         "title": "Paramètres tarifaires",
+        "description": "D'où viennent les prix de l'électricité ? Les appareils se gèrent depuis la page de l'intégration, avec « Ajouter un appareil ».",
         "data": {
-          "segment": "Segment",
+          "price_source": "Prix"
+        }
+      },
+      "public": {
+        "title": "Prix publics",
+        "description": "Choisissez les options tarifaires de votre contrat, indiquées sur votre facture.",
+        "data": {
           "turpe": "Option TURPE",
-          "profil": "Profil",
-          "display": "Affichage",
-          "granularity": "Granularité",
-          "tax_mode": "Mode de taxation",
-          "api_key": "Clé API Sobry"
-        }
-      },
-      "add_plan": {
-        "title": "Ajouter un appareil",
-        "description": "Sobry sélectionne les créneaux les moins chers de la journée et pilote l'entité que vous choisissez.",
-        "data": {
-          "name": "Nom",
-          "mode": "Mode de sélection",
-          "target_entity": "Entité à piloter",
-          "hours": "Durée de fonctionnement",
-          "hours_entity": "Entité fournissant la durée",
-          "extra_hours": "Prolongation après les créneaux",
-          "power_entity": "Prolonger tant que cette entité consomme",
-          "power_threshold": "Puissance au-delà de laquelle l'appareil continue",
-          "power_hold_max": "Prolongation maximale",
-          "window_start": "Début de la plage",
-          "window_end": "Fin de la plage",
-          "fallback_start": "Début du repli",
-          "fallback_end": "Fin du repli",
-          "max_price": "Prix maximum",
-          "threshold_price": "Prix seuil",
-          "force_price": "Toujours lancer sous ce prix",
-          "force_skip_negative": "Sauf les jours à prix négatif",
-          "require_complete_data": "Attendre que toute la plage soit tarifée"
+          "profil": "Type de client",
+          "display": "Prix",
+          "granularity": "Pas des prix"
         },
         "data_description": {
-          "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
-          "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
-          "hours": "Durée quotidienne à programmer dans la plage. Utilisée sauf si un mois ou une entité en fournit une.",
-          "hours_entity": "Facultatif. Un input_number, un number ou un capteur dont la valeur est un nombre d'heures : capteur template sur la température extérieure, la saison, le jour de la semaine. Elle a priorité sur les mois et sur la durée ci-dessus, et remplace le number de durée par un capteur.",
-          "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
-          "power_entity": "Facultatif. Un capteur de puissance de l'appareil. Après la dernière plage planifiée de la journée, l'appareil continue de fonctionner tant que cette entité dépasse le seuil ci-dessous : un chauffe-eau qui consomme encore n'a pas fini de chauffer. Les watts et les kilowatts sont tous deux reconnus.",
-          "power_threshold": "Consommation en watts sous laquelle l'appareil est considéré comme terminé. Elle doit rester sous le seuil pendant deux minutes avant l'arrêt, pour qu'une simple chute ne coupe pas un cycle de chauffe.",
-          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la dernière plage planifiée de la journée, quelle que soit la consommation. Évite qu'un capteur bloqué fasse tourner l'appareil toute la journée.",
-          "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
-          "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
-          "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
-          "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
-          "force_price": "Facultatif. Quels que soient le mode, la plage, la durée ou le prix maximum, l'appareil fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur. Indiquez 0 pour profiter des prix nuls et négatifs, laissez vide pour désactiver.",
-          "force_skip_negative": "Facultatif. Avec un prix défini ci-dessus, l'ignore tous les jours où au moins un prix est négatif : seuls les créneaux retenus par le plan fonctionnent ces jours-là.",
-          "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
-          "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
-          "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
+          "turpe": "Option tarifaire d'acheminement (réseau) de votre contrat.",
+          "granularity": "Le quart d'heure suit au plus près le prix du marché."
         }
       },
-      "edit_plan": {
-        "title": "Modifier un appareil",
+      "api_key": {
+        "title": "Vos prix Sobry",
+        "description": "Les prix de votre propre contrat Sobry. La clé est vérifiée auprès de Sobry avant d'être enregistrée.",
         "data": {
-          "plan_id": "Appareil"
-        }
-      },
-      "plan_settings": {
-        "title": "Modifier {name}",
-        "data": {
-          "name": "Nom",
-          "mode": "Mode de sélection",
-          "target_entity": "Entité à piloter",
-          "hours": "Durée de fonctionnement",
-          "hours_entity": "Entité fournissant la durée",
-          "extra_hours": "Prolongation après les créneaux",
-          "power_entity": "Prolonger tant que cette entité consomme",
-          "power_threshold": "Puissance au-delà de laquelle l'appareil continue",
-          "power_hold_max": "Prolongation maximale",
-          "window_start": "Début de la plage",
-          "window_end": "Fin de la plage",
-          "fallback_start": "Début du repli",
-          "fallback_end": "Fin du repli",
-          "max_price": "Prix maximum",
-          "threshold_price": "Prix seuil",
-          "force_price": "Toujours lancer sous ce prix",
-          "force_skip_negative": "Sauf les jours à prix négatif",
-          "require_complete_data": "Attendre que toute la plage soit tarifée"
+          "api_key": "Clé API Sobry",
+          "tax_mode": "Prix",
+          "granularity": "Pas des prix"
         },
         "data_description": {
-          "name": "Sert de nom d'appareil, par exemple « Chauffe-eau ».",
-          "target_entity": "Si vous la laissez vide, le plan expose seulement un capteur binaire à utiliser dans vos propres automatisations.",
-          "hours": "Durée quotidienne à programmer dans la plage. Utilisée sauf si un mois ou une entité en fournit une.",
-          "hours_entity": "Facultatif. Un input_number, un number ou un capteur dont la valeur est un nombre d'heures : capteur template sur la température extérieure, la saison, le jour de la semaine. Elle a priorité sur les mois et sur la durée ci-dessus, et remplace le number de durée par un capteur.",
-          "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix. Utile pour un chauffe-eau dont on ne connaît pas la température, pour être sûr qu'il a fini de chauffer.",
-          "power_entity": "Facultatif. Un capteur de puissance de l'appareil. Après la dernière plage planifiée de la journée, l'appareil continue de fonctionner tant que cette entité dépasse le seuil ci-dessous : un chauffe-eau qui consomme encore n'a pas fini de chauffer. Les watts et les kilowatts sont tous deux reconnus.",
-          "power_threshold": "Consommation en watts sous laquelle l'appareil est considéré comme terminé. Elle doit rester sous le seuil pendant deux minutes avant l'arrêt, pour qu'une simple chute ne coupe pas un cycle de chauffe.",
-          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la dernière plage planifiée de la journée, quelle que soit la consommation. Évite qu'un capteur bloqué fasse tourner l'appareil toute la journée.",
-          "window_start": "Début de la plage quotidienne dans laquelle Sobry peut choisir les créneaux. Indiquez le même début et la même fin pour une journée entière.",
-          "window_end": "Fin de la plage quotidienne. Une fin antérieure au début correspond à une plage de nuit.",
-          "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
-          "threshold_price": "Utilisé uniquement par le mode « sous un prix seuil ».",
-          "force_price": "Facultatif. Quels que soient le mode, la plage, la durée ou le prix maximum, l'appareil fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur. Indiquez 0 pour profiter des prix nuls et négatifs, laissez vide pour désactiver.",
-          "force_skip_negative": "Facultatif. Avec un prix défini ci-dessus, l'ignore tous les jours où au moins un prix est négatif : seuls les créneaux retenus par le plan fonctionnent ces jours-là.",
-          "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
-          "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
-          "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
-        }
-      },
-      "monthly_hours": {
-        "title": "Durée par mois",
-        "data": {
-          "plan_id": "Appareil"
-        }
-      },
-      "monthly_hours_values": {
-        "title": "Durée par mois de {name}",
-        "description": "Plus longue l'hiver, plus courte l'été. Laissez un mois vide pour utiliser la durée configurée sur l'appareil ({hours} h), et mettez 0 pour laisser l'appareil à l'arrêt ce mois-là.",
-        "data": {
-          "month_1": "Janvier",
-          "month_2": "Février",
-          "month_3": "Mars",
-          "month_4": "Avril",
-          "month_5": "Mai",
-          "month_6": "Juin",
-          "month_7": "Juillet",
-          "month_8": "Août",
-          "month_9": "Septembre",
-          "month_10": "Octobre",
-          "month_11": "Novembre",
-          "month_12": "Décembre"
-        }
-      },
-      "remove_plan": {
-        "title": "Supprimer un appareil",
-        "data": {
-          "plans": "Appareils à supprimer"
+          "api_key": "Clé personnelle de votre compte Sobry. Pour revenir aux prix publics plus tard, choisissez-les dans Configurer.",
+          "granularity": "Le quart d'heure suit au plus près le prix du marché."
         }
       }
     },
     "error": {
-      "name_required": "Un nom est obligatoire."
+      "invalid_api_key": "Sobry a refusé cette clé API : vérifiez-la ou créez-en une nouvelle.",
+      "cannot_connect": "Impossible de joindre Sobry pour vérifier la clé. Réessayez dans un instant."
+    }
+  },
+  "config_subentries": {
+    "appliance": {
+      "initiate_flow": {
+        "user": "Ajouter un appareil",
+        "reconfigure": "Reconfigurer"
+      },
+      "entry_type": "Appareil",
+      "step": {
+        "appliance": {
+          "title": "Appareil",
+          "description": "Sobry choisit les créneaux les moins chers de la journée et allume puis éteint l'entité choisie.",
+          "data": {
+            "name": "Nom",
+            "target_entity": "Entité à piloter",
+            "mode": "Mode de sélection"
+          },
+          "data_description": {
+            "name": "Sert de nom à l'appareil et à ses entités, par exemple « Chauffe-eau ».",
+            "target_entity": "Laissez vide pour obtenir seulement un capteur binaire, à utiliser dans vos propres automatisations."
+          }
+        },
+        "schedule": {
+          "title": "Programmation",
+          "description": "Plage quotidienne dans laquelle les créneaux sont choisis, et durée de fonctionnement.",
+          "data": {
+            "hours": "Durée de fonctionnement",
+            "threshold_price": "Prix seuil",
+            "window_start": "Début de la plage",
+            "window_end": "Fin de la plage",
+            "max_price": "Prix maximum",
+            "require_complete_data": "Attendre que toute la plage soit tarifée",
+            "features": "Options"
+          },
+          "data_description": {
+            "hours": "Durée quotidienne à programmer dans la plage. Sert de valeur par défaut si la durée vient aussi d'un mois ou d'une entité.",
+            "threshold_price": "Tous les créneaux dont le prix est inférieur ou égal à cette valeur sont retenus. Réglable aussi depuis son entité number.",
+            "window_start": "Même début et même fin pour une journée entière.",
+            "window_end": "Une fin antérieure au début correspond à une plage de nuit.",
+            "max_price": "Facultatif. Aucun créneau au-dessus de ce prix n'est retenu, même s'il manque des heures.",
+            "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers.",
+            "features": "Cochez les options à régler à l'étape suivante. Décocher une option la désactive."
+          }
+        },
+        "features": {
+          "title": "Options",
+          "description": "Réglages des options cochées à l'étape précédente.",
+          "sections": {
+            "monthly_runtime": {
+              "name": "Durée par mois",
+              "description": "Plus longue l'hiver, plus courte l'été. Un mois laissé vide reprend la durée de l'étape précédente ; 0 laisse l'appareil à l'arrêt ce mois-là.",
+              "data": {
+                "month_1": "Janvier",
+                "month_2": "Février",
+                "month_3": "Mars",
+                "month_4": "Avril",
+                "month_5": "Mai",
+                "month_6": "Juin",
+                "month_7": "Juillet",
+                "month_8": "Août",
+                "month_9": "Septembre",
+                "month_10": "Octobre",
+                "month_11": "Novembre",
+                "month_12": "Décembre"
+              }
+            },
+            "runtime_entity": {
+              "name": "Durée fournie par une entité",
+              "data": {
+                "hours_entity": "Entité fournissant la durée"
+              },
+              "data_description": {
+                "hours_entity": "Un input_number, un number ou un capteur dont la valeur est un nombre d'heures, par exemple un capteur template sur la température extérieure. Elle a priorité sur les mois et sur la durée, qui prennent le relais tant qu'elle est indisponible."
+              }
+            },
+            "extra_runtime": {
+              "name": "Prolongation fixe",
+              "data": {
+                "extra_hours": "Prolongation après le dernier créneau"
+              },
+              "data_description": {
+                "extra_hours": "Maintient l'appareil en marche pendant cette durée après le dernier créneau retenu, quel que soit le prix : un chauffe-eau sans mesure de température finit ainsi de chauffer."
+              }
+            },
+            "power_hold": {
+              "name": "Finir le cycle",
+              "description": "Après la dernière plage planifiée de la journée, l'appareil continue tant qu'il consomme encore.",
+              "data": {
+                "power_entity": "Entité de puissance",
+                "power_threshold": "Puissance au-delà de laquelle l'appareil continue",
+                "power_hold_max": "Prolongation maximale"
+              },
+              "data_description": {
+                "power_entity": "Un capteur de puissance de l'appareil, en W ou en kW.",
+                "power_threshold": "La mesure doit rester sous ce seuil pendant deux minutes avant l'arrêt, pour qu'une simple chute ne coupe pas un cycle de chauffe.",
+                "power_hold_max": "La prolongation ne dépasse jamais cette durée après la dernière plage planifiée, quelle que soit la consommation."
+              }
+            },
+            "always_run": {
+              "name": "Toujours lancer sous un prix",
+              "description": "En plus du plan, l'appareil fonctionne pendant chaque créneau dont le prix est inférieur ou égal à cette valeur, quels que soient le mode, la plage ou la durée.",
+              "data": {
+                "force_price": "Toujours lancer sous ce prix",
+                "force_skip_negative": "Sauf les jours à prix négatif"
+              },
+              "data_description": {
+                "force_price": "0 permet de profiter de tous les prix nuls et négatifs.",
+                "force_skip_negative": "Les jours où au moins un prix est négatif, seuls les créneaux retenus par le plan fonctionnent."
+              }
+            },
+            "fallback_schedule": {
+              "name": "Horaires de repli",
+              "description": "Horaires fixes utilisés dès que le plan ne peut pas décider : Sobry injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir.",
+              "data": {
+                "fallback_start": "Début du repli",
+                "fallback_end": "Fin du repli"
+              },
+              "data_description": {
+                "fallback_end": "Une fin antérieure au début correspond à une plage de nuit."
+              }
+            }
+          }
+        }
+      },
+      "error": {
+        "name_required": "Un nom est obligatoire.",
+        "name_taken": "Un autre appareil porte déjà ce nom.",
+        "fallback_same_times": "Le début et la fin du repli doivent être différents."
+      },
+      "abort": {
+        "reconfigure_successful": "L'appareil a été mis à jour."
+      }
     }
   },
   "selector": {
+    "price_source": {
+      "options": {
+        "public_c5": "Prix publics, contrat jusqu'à 36 kVA (C5)",
+        "public_c4": "Prix publics, contrat de plus de 36 kVA (C4)",
+        "api_key": "Mes prix Sobry, avec une clé API"
+      }
+    },
+    "turpe": {
+      "options": {
+        "cu": "CU – Courte utilisation",
+        "cu4": "CU4 – Courte utilisation, 4 plages",
+        "mu4": "MU4 – Moyenne utilisation, 4 plages",
+        "mudt": "MUDT – Moyenne utilisation, heures pleines / heures creuses",
+        "lu": "LU – Longue utilisation"
+      }
+    },
+    "profil": {
+      "options": {
+        "particulier": "Particulier",
+        "pro": "Professionnel"
+      }
+    },
+    "tax_mode": {
+      "options": {
+        "ttc": "TTC (toutes taxes comprises)",
+        "ht": "HT (hors taxes)"
+      }
+    },
+    "granularity": {
+      "options": {
+        "quarter_hourly": "Tous les quarts d'heure",
+        "hourly": "Toutes les heures"
+      }
+    },
     "plan_mode": {
       "options": {
-        "cheapest_slots": "Créneaux les moins chers de la plage",
-        "cheapest_block": "Plage continue la moins chère",
-        "threshold": "Sous un prix seuil"
+        "cheapest_slots": "Créneaux les moins chers de la plage, consécutifs ou non",
+        "cheapest_block": "Plage continue la moins chère, sans interruption",
+        "threshold": "Tous les créneaux sous un prix seuil"
+      }
+    },
+    "features": {
+      "options": {
+        "monthly_runtime": "Une durée différente selon le mois",
+        "runtime_entity": "Durée fournie par une entité",
+        "extra_runtime": "Prolongation fixe après le dernier créneau",
+        "power_hold": "Prolonger tant que l'appareil consomme",
+        "always_run": "Toujours lancer sous un prix",
+        "fallback_schedule": "Horaires de repli si les prix manquent"
       }
     }
   },

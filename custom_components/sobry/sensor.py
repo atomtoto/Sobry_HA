@@ -15,7 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -32,28 +32,31 @@ _DAY_STATISTICS = {"min_price": min, "max_price": max, "average_price": mean}
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Sobry sensor entities."""
     runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
     coordinator = runtime.coordinator
 
-    entities: list[Entity] = [
-        SobryPriceSensor(coordinator, entry, "current_price", "Current price"),
-        SobryPriceSensor(coordinator, entry, "next_price", "Next price"),
-        SobryPriceSensor(coordinator, entry, "min_price", "Minimum price"),
-        SobryPriceSensor(coordinator, entry, "max_price", "Maximum price"),
-        SobryPriceSensor(coordinator, entry, "average_price", "Average price"),
-    ]
+    async_add_entities(
+        [
+            SobryPriceSensor(coordinator, entry, "current_price", "Current price"),
+            SobryPriceSensor(coordinator, entry, "next_price", "Next price"),
+            SobryPriceSensor(coordinator, entry, "min_price", "Minimum price"),
+            SobryPriceSensor(coordinator, entry, "max_price", "Maximum price"),
+            SobryPriceSensor(coordinator, entry, "average_price", "Average price"),
+        ]
+    )
 
     for plan in runtime.plans:
-        entities.append(SobryPlanNextStartSensor(plan))
-        entities.append(SobryPlanNextEndSensor(plan))
-        entities.append(SobryPlanAveragePriceSensor(plan))
+        entities: list[Entity] = [
+            SobryPlanNextStartSensor(plan),
+            SobryPlanNextEndSensor(plan),
+            SobryPlanAveragePriceSensor(plan),
+        ]
         if plan.mode != MODE_THRESHOLD and plan.uses_derived_hours:
             entities.append(SobryPlanRuntimeSensor(plan))
-
-    async_add_entities(entities)
+        async_add_entities(entities, config_subentry_id=plan.plan_id)
 
 
 class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEntity):

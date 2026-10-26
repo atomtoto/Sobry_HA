@@ -18,13 +18,25 @@ DEFAULT_DISPLAY = "TTC"
 DEFAULT_GRANULARITY = "quarter_hourly"
 DEFAULT_TAX_MODE = "ttc"
 
+# Where the prices come from, asked first so only the settings that apply are
+# shown. Derived from the settings, never stored.
+CONF_PRICE_SOURCE = "price_source"
+PRICE_SOURCE_PUBLIC_C5 = "public_c5"
+PRICE_SOURCE_PUBLIC_C4 = "public_c4"
+PRICE_SOURCE_API_KEY = "api_key"
+PRICE_SOURCES = [PRICE_SOURCE_PUBLIC_C5, PRICE_SOURCE_PUBLIC_C4, PRICE_SOURCE_API_KEY]
+
 PLATFORMS = ["binary_sensor", "number", "sensor", "switch"]
 
 API_BASE_URL = "https://api.sobry.co"
 
 # --- Device control plans -------------------------------------------------
 # A plan decides when an appliance should run, based on the price series.
+# Each plan is a config subentry of this type; its id is the plan id.
 
+SUBENTRY_APPLIANCE = "appliance"
+
+# Where the plans lived before they became subentries (config entry v1).
 CONF_PLANS = "plans"
 CONF_PLAN_ID = "plan_id"
 CONF_MODE = "mode"
@@ -45,6 +57,16 @@ CONF_THRESHOLD_PRICE = "threshold_price"
 CONF_FORCE_PRICE = "force_price"
 CONF_FORCE_SKIP_NEGATIVE = "force_skip_negative"
 CONF_REQUIRE_COMPLETE_DATA = "require_complete_data"
+
+# Optional features of a plan, ticked in the flow so that only their settings
+# are asked. Derived from the plan settings, never stored.
+CONF_FEATURES = "features"
+FEATURE_MONTHLY_RUNTIME = "monthly_runtime"
+FEATURE_RUNTIME_ENTITY = "runtime_entity"
+FEATURE_EXTRA_RUNTIME = "extra_runtime"
+FEATURE_POWER_HOLD = "power_hold"
+FEATURE_ALWAYS_RUN = "always_run"
+FEATURE_FALLBACK = "fallback_schedule"
 
 # Where the runtime of a plan comes from, exposed as an attribute.
 HOURS_SOURCE_MANUAL = "manual"

@@ -38,7 +38,6 @@ from .const import (
     CONF_POWER_HOLD_MAX,
     CONF_POWER_THRESHOLD,
     CONF_PLAN_ID,
-    CONF_PLANS,
     CONF_REQUIRE_COMPLETE_DATA,
     CONF_TARGET_ENTITY,
     CONF_THRESHOLD_PRICE,
@@ -61,6 +60,7 @@ from .const import (
     MODE_CHEAPEST_SLOTS,
     MODE_THRESHOLD,
     NAME,
+    SUBENTRY_APPLIANCE,
 )
 from .coordinator import SobryDataUpdateCoordinator
 from .planner import (
@@ -768,9 +768,16 @@ class SobryPlan:
 
 
 def plan_configs(entry: ConfigEntry) -> list[dict[str, Any]]:
-    """Return the plan configurations stored in the config entry options."""
-    plans = entry.options.get(CONF_PLANS) or []
-    return [dict(plan) for plan in plans if isinstance(plan, dict) and plan.get(CONF_PLAN_ID)]
+    """Return the plan configurations, one per appliance subentry."""
+    return [
+        {
+            **subentry.data,
+            CONF_PLAN_ID: subentry.subentry_id,
+            CONF_NAME: subentry.data.get(CONF_NAME) or subentry.title,
+        }
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_APPLIANCE
+    ]
 
 
 @dataclass

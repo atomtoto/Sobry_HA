@@ -27,6 +27,8 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
 
 ## Installation
 
+Requires Home Assistant 2025.3 or later.
+
 ### With the button (recommended)
 
 Click the badge above ("Open your Home Assistant instance and open a repository
@@ -50,8 +52,17 @@ needs a helper entity and an automation.
 
 ### Add an appliance
 
-**Settings** → **Devices & Services** → **Sobry Energy** → **Configure** →
-**Add an appliance**, then fill in:
+**Settings** → **Devices & Services** → **Sobry Energy** → **Add an appliance**.
+The form only asks what your choices call for:
+
+1. **Appliance** — name, entity to control and selection mode.
+2. **Schedule** — window, runtime (the price threshold in the threshold mode),
+   maximum price, and the options to use: runtime per month or from an entity,
+   fixed extension, finishing the cycle, always run below a price, fallback
+   schedule.
+3. **Options** — the settings of the options ticked at step 2, and nothing else.
+
+The fields are:
 
 | Field | Meaning |
 | --- | --- |
@@ -72,8 +83,12 @@ needs a helper entity and an automation.
 | Fallback start / end | Optional fixed schedule, used whenever the plan cannot decide. See [Safety net](#safety-net) |
 | Wait for the whole window to be priced | Keeps the appliance off until every price of the window is published |
 
-Each appliance becomes its own device. Add as many as you need, and edit or
-remove them from the same menu.
+Each appliance is listed under the integration, as its own device. Add as many
+as you need; change one with **Reconfigure** in its menu, where unticking an
+option turns it off, or delete it from the same menu.
+
+Appliances set up with version 0.8 or earlier, in the options, are moved there
+on the first start, with the same entities and history.
 
 ### Selection modes
 
@@ -146,17 +161,18 @@ While the hold is on, the binary sensor stays `on` and carries
 A water heater needs fewer hours in July than in January. Two ways to follow
 that, both optional:
 
-**Per month** — **Configure** → **Runtime per month**, pick the appliance, and
-fill in the months that differ. A month left empty uses the runtime configured
-on the appliance, so filling in November to March is enough. A month set to `0`
-keeps the appliance off for that month — a pool pump over winter, for instance.
+**Per month** — tick *A different runtime per month* in the options of the
+appliance, and fill in the months that differ. A month left empty uses the
+runtime configured on the appliance, so filling in November to March is enough.
+A month set to `0` keeps the appliance off for that month — a pool pump over
+winter, for instance.
 
-**From an entity** — point *Entity giving the runtime* at an `input_number` you
-set from a dashboard, or at any `number` or sensor whose value is a number of
-hours. That covers everything a month cannot: a template sensor on the outdoor
-temperature, on `sensor.season`, on the day of the week, on who is home. The
-plan follows the entity as it changes, without waiting for the next price
-refresh, and clamps the value to 0–24 h.
+**From an entity** — tick *Runtime read from an entity*, and point it at an
+`input_number` you set from a dashboard, or at any `number` or sensor whose
+value is a number of hours. That covers everything a month cannot: a template
+sensor on the outdoor temperature, on `sensor.season`, on the day of the week,
+on who is home. The plan follows the entity as it changes, without waiting for
+the next price refresh, and clamps the value to 0–24 h.
 
 The runtime is resolved in that order: the entity if it holds a usable number,
 then the month, then the runtime configured on the appliance. An entity that is
@@ -301,11 +317,12 @@ You can set an optional `api_key` in the integration configuration/options flow.
   - `days=1`, for today and tomorrow
 - When `api_key` is not set, the integration uses the previous endpoint/behavior.
 
-The key is entered in a masked field. To remove it, clear the field in
-**Configure** → **Pricing settings**: the integration goes back to the public
-prices. When Sobry refuses the key — revoked or expired — Home Assistant asks
-for a new one from **Settings** → **Devices & Services**; leave it empty there
-to go back to the public prices.
+Choose *My Sobry prices, with an API key* when adding the integration, or later
+in **Configure**. The key is entered in a masked field and checked with Sobry
+before it is saved. To remove it, choose the public prices in **Configure**.
+When Sobry refuses the key — revoked or expired — Home Assistant asks for a new
+one from **Settings** → **Devices & Services**; leave it empty there to go back
+to the public prices.
 
 The integration also supports v2 parameters internally:
 - `granularity` mapped to `15m` or `1h`

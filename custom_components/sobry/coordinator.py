@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from collections.abc import Mapping
+from datetime import date, datetime, time, timedelta
 import logging
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -66,6 +67,78 @@ def _entry_dt(item: Any, fold: int = 0) -> datetime | None:
     except (TypeError, ValueError):
         return None
     return parsed.replace(tzinfo=_SOBRY_TIME_ZONE, fold=fold).astimezone(dt_util.UTC)
+
+
+def build_request(
+    settings: Mapping[str, Any], today: date
+) -> tuple[str, dict[str, Any], dict[str, str] | None]:
+    """Return the URL, query and headers asking for the prices around ``today``."""
+    segment = settings.get(CONF_SEGMENT, DEFAULT_SEGMENT)
+    granularity = settings.get(CONF_GRANULARITY, DEFAULT_GRANULARITY)
+    display = settings.get(CONF_DISPLAY, DEFAULT_DISPLAY)
+    tax_mode = (
+        settings.get(CONF_TAX_MODE, DEFAULT_TAX_MODE) or DEFAULT_TAX_MODE
+    ).lower()
+    api_key = (settings.get(CONF_API_KEY) or "").strip()
+
+    if api_key:
+        if segment == "C4":
+            tax_mode = "ht"
+        elif tax_mode not in {"ht", "ttc"}:
+            tax_mode = "ht" if str(display).upper() == "HT" else "ttc"
+
+        # Today and tomorrow: tomorrow is a forecast until it is published.
+        params: dict[str, Any] = {
+            "day": today.isoformat(),
+            "days": 1,
+            "granularity": "15m" if granularity == "quarter_hourly" else "1h",
+            "taxMode": tax_mode,
+        }
+        headers = {"Authorization": "Bearer " + api_key}
+        return f"{API_BASE_URL}/v2/user/daily-prices", params, headers
+
+    # ``end`` is excluded: yesterday to tomorrow. Tomorrow comes without
+    # prices until it is published; a range starting on an unpublished day is
+    # refused, a range ending on one is not.
+    params = {
+        "start": (today - timedelta(days=1)).isoformat(),
+        "end": (today + timedelta(days=2)).isoformat(),
+        "granularity": granularity,
+        "segment": segment,
+        "turpe": settings.get(CONF_TURPE, DEFAULT_TURPE),
+        "profil": settings.get(CONF_PROFIL, DEFAULT_PROFIL),
+        "display": display,
+    }
+
+    if segment == "C4":
+        params["profil"] = "pro"
+        params["display"] = "HT"
+
+    return f"{API_BASE_URL}/api/prices/raw", params, None
+
+
+async def async_validate_api_key(
+    hass: HomeAssistant, settings: Mapping[str, Any]
+) -> str | None:
+    """Try the API key of ``settings``, returning an error key if it fails."""
+    today = dt_util.now(_SOBRY_TIME_ZONE).date()
+    url, params, headers = build_request(settings, today)
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            url, params=params, headers=headers, timeout=20
+        ) as response:
+            if response.status in (401, 403):
+                return "invalid_api_key"
+            if response.status != 200:
+                _LOGGER.debug(
+                    "Sobry API answered %s while checking the API key", response.status
+                )
+                return "cannot_connect"
+    except (ClientError, TimeoutError) as err:
+        _LOGGER.debug("Could not reach Sobry to check the API key: %s", err)
+        return "cannot_connect"
+    return None
 
 
 class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -137,52 +210,11 @@ class SobryDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Sobry API."""
         data = self.settings
-        segment = data.get(CONF_SEGMENT, DEFAULT_SEGMENT)
-        granularity = data.get(CONF_GRANULARITY, DEFAULT_GRANULARITY)
-        display = data.get(CONF_DISPLAY, DEFAULT_DISPLAY)
-        tax_mode = (data.get(CONF_TAX_MODE, DEFAULT_TAX_MODE) or DEFAULT_TAX_MODE).lower()
         api_key = (data.get(CONF_API_KEY) or "").strip()
         # Prices are published per day in France, whatever the zone of Home
         # Assistant or of the host.
         today = dt_util.now(_SOBRY_TIME_ZONE).date()
-
-        params: dict[str, Any]
-        headers: dict[str, str] | None = None
-
-        if api_key:
-            if segment == "C4":
-                tax_mode = "ht"
-            elif tax_mode not in {"ht", "ttc"}:
-                tax_mode = "ht" if str(display).upper() == "HT" else "ttc"
-
-            # Today and tomorrow: tomorrow is a forecast until it is published.
-            params = {
-                "day": today.isoformat(),
-                "days": 1,
-                "granularity": "15m" if granularity == "quarter_hourly" else "1h",
-                "taxMode": tax_mode,
-            }
-            headers = {"Authorization": "Bearer " + api_key}
-            url = f"{API_BASE_URL}/v2/user/daily-prices"
-        else:
-            # ``end`` is excluded: yesterday to tomorrow. Tomorrow comes without
-            # prices until it is published; a range starting on an unpublished
-            # day is refused, a range ending on one is not.
-            params = {
-                "start": (today - timedelta(days=1)).isoformat(),
-                "end": (today + timedelta(days=2)).isoformat(),
-                "granularity": granularity,
-                "segment": segment,
-                "turpe": data.get(CONF_TURPE, DEFAULT_TURPE),
-                "profil": data.get(CONF_PROFIL, DEFAULT_PROFIL),
-                "display": display,
-            }
-
-            if segment == "C4":
-                params["profil"] = "pro"
-                params["display"] = "HT"
-
-            url = f"{API_BASE_URL}/api/prices/raw"
+        url, params, headers = build_request(data, today)
 
         session = async_get_clientsession(self.hass)
 

@@ -9,7 +9,7 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 
 from .const import DOMAIN, MAX_HOURS, MAX_PRICE_LIMIT, MODE_THRESHOLD
@@ -20,19 +20,21 @@ from .plan import SobryPlan, SobryRuntimeData
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the tunable settings of every plan."""
     runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SobryPlanEntity] = []
     for plan in runtime.plans:
+        entity: SobryPlanEntity
         if plan.mode == MODE_THRESHOLD:
-            entities.append(SobryPlanThresholdNumber(plan))
+            entity = SobryPlanThresholdNumber(plan)
         elif not plan.uses_derived_hours:
             # A runtime driven by a month table or an entity is reported by a
             # sensor instead, so there is a single source of truth.
-            entities.append(SobryPlanHoursNumber(plan))
-    async_add_entities(entities)
+            entity = SobryPlanHoursNumber(plan)
+        else:
+            continue
+        async_add_entities([entity], config_subentry_id=plan.plan_id)
 
 
 @dataclass

@@ -1,17 +1,38 @@
 {
   "config": {
     "step": {
-      "user": {
+      "source": {
         "title": "Sobry Energy",
-        "description": "Configure Sobry V2 electricity prices.",
+        "description": "Where should the electricity prices come from? Only the settings that apply to your choice are asked next.",
         "data": {
-          "segment": "Segment",
+          "price_source": "Prices"
+        }
+      },
+      "public": {
+        "title": "Public prices",
+        "description": "Choose the tariff options of your contract, as shown on your bill.",
+        "data": {
           "turpe": "TURPE option",
-          "profil": "Profile",
-          "display": "Display",
-          "granularity": "Granularity",
-          "tax_mode": "Tax mode",
-          "api_key": "Sobry API key"
+          "profil": "Customer type",
+          "display": "Prices",
+          "granularity": "Price step"
+        },
+        "data_description": {
+          "turpe": "Network tariff option of your contract.",
+          "granularity": "Every 15 minutes follows the market price most closely."
+        }
+      },
+      "api_key": {
+        "title": "Your Sobry prices",
+        "description": "The prices of your own Sobry contract. The key is checked with Sobry before it is saved.",
+        "data": {
+          "api_key": "Sobry API key",
+          "tax_mode": "Prices",
+          "granularity": "Price step"
+        },
+        "data_description": {
+          "api_key": "Personal key of your Sobry account. To go back to the public prices later, choose them in Configure.",
+          "granularity": "Every 15 minutes follows the market price most closely."
         }
       },
       "reauth_confirm": {
@@ -22,6 +43,10 @@
         }
       }
     },
+    "error": {
+      "invalid_api_key": "Sobry refused this API key: check it, or create a new one.",
+      "cannot_connect": "Sobry could not be reached to check the key. Try again in a moment."
+    },
     "abort": {
       "already_configured": "Sobry Energy is already configured.",
       "reauth_successful": "The API key was updated.",
@@ -30,161 +55,229 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Sobry options",
-        "description": "Change the pricing settings or manage the appliances driven by the market price.",
-        "menu_options": {
-          "settings": "Pricing settings",
-          "add_plan": "Add an appliance",
-          "edit_plan": "Edit an appliance",
-          "monthly_hours": "Runtime per month",
-          "remove_plan": "Remove an appliance"
-        }
-      },
-      "settings": {
+      "source": {
         "title": "Pricing settings",
+        "description": "Where should the electricity prices come from? Appliances are managed from the integration page, with Add an appliance.",
         "data": {
-          "segment": "Segment",
+          "price_source": "Prices"
+        }
+      },
+      "public": {
+        "title": "Public prices",
+        "description": "Choose the tariff options of your contract, as shown on your bill.",
+        "data": {
           "turpe": "TURPE option",
-          "profil": "Profile",
-          "display": "Display",
-          "granularity": "Granularity",
-          "tax_mode": "Tax mode",
-          "api_key": "Sobry API key"
-        }
-      },
-      "add_plan": {
-        "title": "Add an appliance",
-        "description": "Sobry picks the cheapest slots of the day and drives the entity you select.",
-        "data": {
-          "name": "Name",
-          "mode": "Selection mode",
-          "target_entity": "Entity to control",
-          "hours": "Runtime",
-          "hours_entity": "Entity giving the runtime",
-          "extra_hours": "Extra runtime after the cheap slots",
-          "power_entity": "Keep running while this entity draws power",
-          "power_threshold": "Power above which the appliance keeps running",
-          "power_hold_max": "Maximum hold",
-          "window_start": "Window start",
-          "window_end": "Window end",
-          "fallback_start": "Fallback start",
-          "fallback_end": "Fallback end",
-          "max_price": "Maximum price",
-          "threshold_price": "Price threshold",
-          "force_price": "Always run below this price",
-          "force_skip_negative": "Not on days with a negative price",
-          "require_complete_data": "Wait for the whole window to be priced"
+          "profil": "Customer type",
+          "display": "Prices",
+          "granularity": "Price step"
         },
         "data_description": {
-          "name": "Used as the device name, for instance \"Water heater\".",
-          "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
-          "hours": "Daily runtime to schedule during the window. Used unless a month or an entity provides one.",
-          "hours_entity": "Optional. An input_number, a number or a sensor whose value is a number of hours — a template sensor on the outdoor temperature, the season, the day of the week. It wins over the months and over the runtime above, and replaces the runtime number by a sensor.",
-          "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
-          "power_entity": "Optional. A power sensor of the appliance. After the last planned window of the day the appliance keeps running while that entity reads above the threshold below — a water heater still drawing power has not finished heating. Watts and kilowatts are both understood.",
-          "power_threshold": "Consumption under which the appliance is considered done, in watts. It has to stay below for two minutes before the appliance stops, so a single dip does not cut a heating cycle short.",
-          "power_hold_max": "The hold never lasts longer than this after the last planned window of the day, whatever the consumption reads. Keeps a stuck sensor from running the appliance all day.",
-          "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
-          "window_end": "End of the daily window. A window ending before it starts runs overnight.",
-          "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
-          "threshold_price": "Used by the \"below a price threshold\" mode only.",
-          "force_price": "Optional. Whatever the mode, the window, the runtime or the maximum price, the appliance also runs during every slot priced at or below this value. Set 0 to make the most of free and negative prices, leave empty to disable.",
-          "force_skip_negative": "Optional. With a price set above, leaves it out on any day that has a negative price: only the slots the plan selected run those days.",
-          "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
-          "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
-          "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
+          "turpe": "Network tariff option of your contract.",
+          "granularity": "Every 15 minutes follows the market price most closely."
         }
       },
-      "edit_plan": {
-        "title": "Edit an appliance",
+      "api_key": {
+        "title": "Your Sobry prices",
+        "description": "The prices of your own Sobry contract. The key is checked with Sobry before it is saved.",
         "data": {
-          "plan_id": "Appliance"
-        }
-      },
-      "plan_settings": {
-        "title": "Edit {name}",
-        "data": {
-          "name": "Name",
-          "mode": "Selection mode",
-          "target_entity": "Entity to control",
-          "hours": "Runtime",
-          "hours_entity": "Entity giving the runtime",
-          "extra_hours": "Extra runtime after the cheap slots",
-          "power_entity": "Keep running while this entity draws power",
-          "power_threshold": "Power above which the appliance keeps running",
-          "power_hold_max": "Maximum hold",
-          "window_start": "Window start",
-          "window_end": "Window end",
-          "fallback_start": "Fallback start",
-          "fallback_end": "Fallback end",
-          "max_price": "Maximum price",
-          "threshold_price": "Price threshold",
-          "force_price": "Always run below this price",
-          "force_skip_negative": "Not on days with a negative price",
-          "require_complete_data": "Wait for the whole window to be priced"
+          "api_key": "Sobry API key",
+          "tax_mode": "Prices",
+          "granularity": "Price step"
         },
         "data_description": {
-          "name": "Used as the device name, for instance \"Water heater\".",
-          "target_entity": "Left empty, the plan only publishes a binary sensor you can use in your own automations.",
-          "hours": "Daily runtime to schedule during the window. Used unless a month or an entity provides one.",
-          "hours_entity": "Optional. An input_number, a number or a sensor whose value is a number of hours — a template sensor on the outdoor temperature, the season, the day of the week. It wins over the months and over the runtime above, and replaces the runtime number by a sensor.",
-          "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price. Useful for a water heater whose temperature you cannot read, to be sure it finished heating.",
-          "power_entity": "Optional. A power sensor of the appliance. After the last planned window of the day the appliance keeps running while that entity reads above the threshold below — a water heater still drawing power has not finished heating. Watts and kilowatts are both understood.",
-          "power_threshold": "Consumption under which the appliance is considered done, in watts. It has to stay below for two minutes before the appliance stops, so a single dip does not cut a heating cycle short.",
-          "power_hold_max": "The hold never lasts longer than this after the last planned window of the day, whatever the consumption reads. Keeps a stuck sensor from running the appliance all day.",
-          "window_start": "Start of the daily window Sobry may pick slots in. Keep the same start and end for a full day.",
-          "window_end": "End of the daily window. A window ending before it starts runs overnight.",
-          "max_price": "Slots above this price are never selected. Leave empty to always run the requested hours.",
-          "threshold_price": "Used by the \"below a price threshold\" mode only.",
-          "force_price": "Optional. Whatever the mode, the window, the runtime or the maximum price, the appliance also runs during every slot priced at or below this value. Set 0 to make the most of free and negative prices, leave empty to disable.",
-          "force_skip_negative": "Optional. With a price set above, leaves it out on any day that has a negative price: only the slots the plan selected run those days.",
-          "fallback_start": "Fixed schedule used whenever the plan cannot decide: unreachable API, prices not published, or a window it could not fill. Leave both times empty to disable it.",
-          "fallback_end": "End of the fixed fallback schedule. An end before the start runs overnight.",
-          "require_complete_data": "Hold the appliance off until every price of the window is published, so the cheapest slots are not missed."
-        }
-      },
-      "monthly_hours": {
-        "title": "Runtime per month",
-        "data": {
-          "plan_id": "Appliance"
-        }
-      },
-      "monthly_hours_values": {
-        "title": "Runtime per month for {name}",
-        "description": "Longer in winter, shorter in summer. Leave a month empty to use the runtime configured on the appliance ({hours} h), and set it to 0 to keep the appliance off for that month.",
-        "data": {
-          "month_1": "January",
-          "month_2": "February",
-          "month_3": "March",
-          "month_4": "April",
-          "month_5": "May",
-          "month_6": "June",
-          "month_7": "July",
-          "month_8": "August",
-          "month_9": "September",
-          "month_10": "October",
-          "month_11": "November",
-          "month_12": "December"
-        }
-      },
-      "remove_plan": {
-        "title": "Remove an appliance",
-        "data": {
-          "plans": "Appliances to remove"
+          "api_key": "Personal key of your Sobry account. To go back to the public prices later, choose them in Configure.",
+          "granularity": "Every 15 minutes follows the market price most closely."
         }
       }
     },
     "error": {
-      "name_required": "A name is required."
+      "invalid_api_key": "Sobry refused this API key: check it, or create a new one.",
+      "cannot_connect": "Sobry could not be reached to check the key. Try again in a moment."
+    }
+  },
+  "config_subentries": {
+    "appliance": {
+      "initiate_flow": {
+        "user": "Add an appliance",
+        "reconfigure": "Reconfigure"
+      },
+      "entry_type": "Appliance",
+      "step": {
+        "appliance": {
+          "title": "Appliance",
+          "description": "Sobry picks the cheapest slots of the day and switches the chosen entity on and off.",
+          "data": {
+            "name": "Name",
+            "target_entity": "Entity to control",
+            "mode": "Selection mode"
+          },
+          "data_description": {
+            "name": "Names the device and its entities, for example “Water heater”.",
+            "target_entity": "Leave empty to only get a binary sensor, to use in your own automations."
+          }
+        },
+        "schedule": {
+          "title": "Schedule",
+          "description": "Daily window the slots are picked in, and how long to run.",
+          "data": {
+            "hours": "Runtime",
+            "threshold_price": "Price threshold",
+            "window_start": "Window start",
+            "window_end": "Window end",
+            "max_price": "Maximum price",
+            "require_complete_data": "Wait for the whole window to be priced",
+            "features": "Options"
+          },
+          "data_description": {
+            "hours": "Hours to schedule in the window each day. Used as the default when the runtime also comes from a month or an entity.",
+            "threshold_price": "Every slot at or under this price is selected. It can also be tuned from its number entity.",
+            "window_start": "Same start and end means a full day.",
+            "window_end": "An end before the start makes an overnight window.",
+            "max_price": "Optional. A slot above it is never selected, even if hours are missing.",
+            "require_complete_data": "Keeps the appliance off until every price of the window is published, so the cheapest slots are not missed.",
+            "features": "Tick the options to set up at the next step. Unticking one turns it off."
+          }
+        },
+        "features": {
+          "title": "Options",
+          "description": "Settings of the options ticked at the previous step.",
+          "sections": {
+            "monthly_runtime": {
+              "name": "Runtime per month",
+              "description": "Longer in winter, shorter in summer. A month left empty uses the runtime of the previous step; 0 keeps the appliance off that month.",
+              "data": {
+                "month_1": "January",
+                "month_2": "February",
+                "month_3": "March",
+                "month_4": "April",
+                "month_5": "May",
+                "month_6": "June",
+                "month_7": "July",
+                "month_8": "August",
+                "month_9": "September",
+                "month_10": "October",
+                "month_11": "November",
+                "month_12": "December"
+              }
+            },
+            "runtime_entity": {
+              "name": "Runtime from an entity",
+              "data": {
+                "hours_entity": "Entity giving the runtime"
+              },
+              "data_description": {
+                "hours_entity": "An input_number, number or sensor holding a number of hours, for example a template on the outdoor temperature. It wins over the months and the runtime, which take over while it is unavailable."
+              }
+            },
+            "extra_runtime": {
+              "name": "Fixed extension",
+              "data": {
+                "extra_hours": "Extra runtime after the last slot"
+              },
+              "data_description": {
+                "extra_hours": "Keeps the appliance running that long after the last selected slot, whatever the price: a water heater with no temperature reading finishes heating."
+              }
+            },
+            "power_hold": {
+              "name": "Finish the cycle",
+              "description": "After the last planned window of the day, the appliance keeps running while it still draws power.",
+              "data": {
+                "power_entity": "Power entity",
+                "power_threshold": "Power above which the appliance keeps running",
+                "power_hold_max": "Maximum extension"
+              },
+              "data_description": {
+                "power_entity": "A power sensor of the appliance, in W or kW.",
+                "power_threshold": "The reading has to stay under it for two minutes before the appliance stops, so a single dip never cuts a heating cycle short.",
+                "power_hold_max": "Never extends longer than this after the last planned window, whatever the reading."
+              }
+            },
+            "always_run": {
+              "name": "Always run below a price",
+              "description": "On top of the plan, the appliance runs in every slot at or under this price, whatever the mode, window or runtime.",
+              "data": {
+                "force_price": "Always run below this price",
+                "force_skip_negative": "Not on days with a negative price"
+              },
+              "data_description": {
+                "force_price": "0 catches every free or negative price.",
+                "force_skip_negative": "On a day with at least one negative price, only the slots of the plan run."
+              }
+            },
+            "fallback_schedule": {
+              "name": "Fallback schedule",
+              "description": "Fixed hours used whenever the plan cannot decide: Sobry unreachable, prices not published, or a window it could not fill.",
+              "data": {
+                "fallback_start": "Fallback start",
+                "fallback_end": "Fallback end"
+              },
+              "data_description": {
+                "fallback_end": "An end before the start makes an overnight window."
+              }
+            }
+          }
+        }
+      },
+      "error": {
+        "name_required": "A name is required.",
+        "name_taken": "Another appliance already has this name.",
+        "fallback_same_times": "The fallback start and end must differ."
+      },
+      "abort": {
+        "reconfigure_successful": "The appliance was updated."
+      }
     }
   },
   "selector": {
+    "price_source": {
+      "options": {
+        "public_c5": "Public prices, contract up to 36 kVA (C5)",
+        "public_c4": "Public prices, contract over 36 kVA (C4)",
+        "api_key": "My Sobry prices, with an API key"
+      }
+    },
+    "turpe": {
+      "options": {
+        "cu": "CU – Short use",
+        "cu4": "CU4 – Short use, 4 time periods",
+        "mu4": "MU4 – Medium use, 4 time periods",
+        "mudt": "MUDT – Medium use, peak / off-peak",
+        "lu": "LU – Long use"
+      }
+    },
+    "profil": {
+      "options": {
+        "particulier": "Individual",
+        "pro": "Professional"
+      }
+    },
+    "tax_mode": {
+      "options": {
+        "ttc": "Including taxes (TTC)",
+        "ht": "Excluding taxes (HT)"
+      }
+    },
+    "granularity": {
+      "options": {
+        "quarter_hourly": "Every 15 minutes",
+        "hourly": "Every hour"
+      }
+    },
     "plan_mode": {
       "options": {
-        "cheapest_slots": "Cheapest slots of the window",
-        "cheapest_block": "Cheapest continuous block",
-        "threshold": "Below a price threshold"
+        "cheapest_slots": "Cheapest slots of the window, consecutive or not",
+        "cheapest_block": "Cheapest continuous block, uninterrupted",
+        "threshold": "Every slot below a price threshold"
+      }
+    },
+    "features": {
+      "options": {
+        "monthly_runtime": "A different runtime per month",
+        "runtime_entity": "Runtime read from an entity",
+        "extra_runtime": "Fixed extension after the last slot",
+        "power_hold": "Keep running while the appliance draws power",
+        "always_run": "Always run below a price",
+        "fallback_schedule": "Fixed schedule when prices are missing"
       }
     }
   },

@@ -11,7 +11,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .entity import SobryPlanEntity
@@ -21,16 +21,15 @@ from .plan import SobryPlan, SobryRuntimeData
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up one binary sensor per configured plan."""
     runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SobryPlanEntity] = []
     for plan in runtime.plans:
-        entities.append(SobryPlanBinarySensor(plan))
+        entities: list[SobryPlanEntity] = [SobryPlanBinarySensor(plan)]
         if plan.has_fallback:
             entities.append(SobryPlanFallbackBinarySensor(plan))
-    async_add_entities(entities)
+        async_add_entities(entities, config_subentry_id=plan.plan_id)
 
 
 class SobryPlanBinarySensor(SobryPlanEntity, BinarySensorEntity):
