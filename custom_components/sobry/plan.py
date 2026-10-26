@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, tzinfo
@@ -20,7 +21,8 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -34,10 +36,10 @@ from .const import (
     CONF_HOURS_ENTITY,
     CONF_MAX_PRICE,
     CONF_MODE,
+    CONF_PLAN_ID,
     CONF_POWER_ENTITY,
     CONF_POWER_HOLD_MAX,
     CONF_POWER_THRESHOLD,
-    CONF_PLAN_ID,
     CONF_REQUIRE_COMPLETE_DATA,
     CONF_TARGET_ENTITY,
     CONF_THRESHOLD_PRICE,
@@ -77,6 +79,8 @@ _LOGGER = logging.getLogger(__name__)
 # A power reading has to stay below the threshold for that long before the
 # appliance is released: a single dip must not cut a heating cycle short.
 POWER_RELEASE_DELAY = timedelta(minutes=2)
+
+type SobryConfigEntry = ConfigEntry[SobryRuntimeData]
 
 
 def local_timezone():
@@ -191,6 +195,9 @@ class SobryPlan:
         self._control_started = False
         self._applied_state: bool | None = None
         self._last_control_error: str | None = None
+        # The tick, a price refresh and a switch may all want to drive the
+        # appliance at once: one call at a time.
+        self._control_lock = asyncio.Lock()
         self._active: bool | None = None
         self._hours_source = HOURS_SOURCE_MANUAL
         self._last_hours_error: str | None = None
@@ -221,7 +228,19 @@ class SobryPlan:
             name=self.name,
             manufacturer=NAME,
             model="Price plan",
+            entry_type=DeviceEntryType.SERVICE,
+            via_device=(DOMAIN, self.entry.entry_id),
         )
+
+    @property
+    def issue_id(self) -> str:
+        """Return the id of the repair raised when the target entity is gone."""
+        return f"target_missing_{self.plan_id}"
+
+    @callback
+    def async_clear_issue(self) -> None:
+        """Withdraw the repair: raised again by the next run if still due."""
+        ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
 
     # -- Tunable settings -------------------------------------------------
 
@@ -523,7 +542,6 @@ class SobryPlan:
             )
             self._last_power_error = message
         self._power_now = None
-        return None
 
     def _resolve_hours(self, moment: datetime, zone: tzinfo) -> tuple[float, str]:
         """Return the runtime to schedule, and where it comes from."""
@@ -607,11 +625,21 @@ class SobryPlan:
 
     async def async_apply_control(self) -> None:
         """Turn the target entity on or off when the plan says so."""
+        async with self._control_lock:
+            await self._async_apply_control()
+
+    async def _async_apply_control(self) -> None:
+        """Call the service the plan asks for, unless already done."""
         if not self._control_started or not self.control_enabled:
             return
         if not self.target_entity or self._active is None:
             return
         if self._active is self._applied_state:
+            return
+        if not self._target_ready():
+            # Nothing to drive yet: tried again on the next tick, so the
+            # appliance follows the plan as soon as it is back.
+            self._applied_state = None
             return
 
         service = SERVICE_TURN_ON if self._active else SERVICE_TURN_OFF
@@ -623,16 +651,7 @@ class SobryPlan:
                 blocking=True,
             )
         except (HomeAssistantError, ValueError) as err:
-            message = str(err)
-            if message != self._last_control_error:
-                _LOGGER.warning(
-                    "Sobry plan %s could not call %s on %s: %s",
-                    self.name,
-                    service,
-                    self.target_entity,
-                    err,
-                )
-                self._last_control_error = message
+            self._warn_control(f"{service} failed on {self.target_entity}: {err}")
             # Leave the applied state unknown so the call is retried.
             self._applied_state = None
             return
@@ -642,6 +661,50 @@ class SobryPlan:
         _LOGGER.debug(
             "Sobry plan %s called %s on %s", self.name, service, self.target_entity
         )
+
+    def _target_ready(self) -> bool:
+        """Return whether the target entity can be driven right now.
+
+        A call on an unavailable entity is dropped without an error: it would
+        be taken as done, and the appliance left in the wrong state until the
+        next planned change. A target that no longer exists is reported as a
+        repair, once Home Assistant has started and had a chance to load it.
+        """
+        assert self.target_entity is not None
+        state = self.hass.states.get(self.target_entity)
+        missing = state is None and (
+            er.async_get(self.hass).async_get(self.target_entity) is None
+        )
+        if missing and self.hass.is_running:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self.issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="target_missing",
+                translation_placeholders={
+                    "name": self.name,
+                    "entity_id": self.target_entity,
+                },
+            )
+        elif not missing:
+            ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
+
+        if state is None:
+            self._warn_control(f"{self.target_entity} does not exist, waiting for it")
+            return False
+        if state.state == STATE_UNAVAILABLE:
+            self._warn_control(f"{self.target_entity} is unavailable, waiting for it")
+            return False
+        return True
+
+    def _warn_control(self, message: str) -> None:
+        """Warn once about a target entity the plan cannot drive."""
+        if message == self._last_control_error:
+            return
+        _LOGGER.warning("Sobry plan %s cannot drive its appliance: %s", self.name, message)
+        self._last_control_error = message
 
     # -- Presentation -----------------------------------------------------
 
@@ -798,7 +861,12 @@ class SobryRuntimeData:
             plan.async_recalculate()
             plan.async_notify_listeners()
         if self.plans:
-            self.coordinator.hass.async_create_task(self.async_apply_control())
+            # Tied to the entry: cancelled if it is unloaded meanwhile.
+            self.coordinator.config_entry.async_create_background_task(
+                self.coordinator.hass,
+                self.async_apply_control(),
+                name=f"{DOMAIN} apply control",
+            )
 
     async def async_apply_control(self) -> None:
         """Drive every target entity towards its planned state."""

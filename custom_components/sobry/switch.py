@@ -5,24 +5,22 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF, STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN
 from .entity import SobryPlanEntity
-from .plan import SobryPlan, SobryRuntimeData
+from .plan import SobryConfigEntry, SobryPlan
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SobryConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the switches of every plan."""
-    runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime = entry.runtime_data
     for plan in runtime.plans:
         # Forcing works without an entity to control: the binary sensor follows.
         entities: list[SobryPlanEntity] = [SobryPlanBoostSwitch(plan)]

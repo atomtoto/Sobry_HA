@@ -1,0 +1,31 @@
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "PIE", "RET", "RUF", "SIM", "UP", "W"]
+ignore = [
+    "E501", # Long lines are left to the reviewer, as in Home Assistant.
+]
+
+[tool.ruff.lint.isort]
+# The import layout of Home Assistant itself.
+force-sort-within-sections = true
+known-first-party = ["homeassistant"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "integration",
+    "local-folder",
+]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.ruff.lint.isort.sections]
+integration = ["custom_components"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

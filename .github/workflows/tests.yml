@@ -7,12 +7,34 @@ on:
     branches: [main]
 
 jobs:
-  planner:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Run the planner tests
-        run: python -m unittest discover -s tests -v
+          python-version: "3.13"
+      - run: pip install ruff==0.17.2
+      - run: ruff check custom_components tests
+
+  pytest:
+    name: pytest (Home Assistant ${{ matrix.home-assistant }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest release supported, as set in hacs.json. Its pinned
+          # aiohttp was yanked: naming it lets it be installed all the same.
+          - home-assistant: "2025.3"
+            requirements: pytest-homeassistant-custom-component==0.13.225 aiohttp==3.11.13
+          - home-assistant: "2026.2"
+            requirements: -r requirements_test.txt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install uv
+      - run: uv pip install --system ${{ matrix.requirements }}
+      - run: python -m pytest -p no:cacheprovider

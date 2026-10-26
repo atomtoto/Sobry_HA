@@ -6,24 +6,23 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 
-from .const import DOMAIN, MAX_HOURS, MAX_PRICE_LIMIT, MODE_THRESHOLD
+from .const import MAX_HOURS, MAX_PRICE_LIMIT, MODE_THRESHOLD
 from .entity import SobryPlanEntity
-from .plan import SobryPlan, SobryRuntimeData
+from .plan import SobryConfigEntry, SobryPlan
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SobryConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the tunable settings of every plan."""
-    runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime = entry.runtime_data
     for plan in runtime.plans:
         entity: SobryPlanEntity
         if plan.mode == MODE_THRESHOLD:

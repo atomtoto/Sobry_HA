@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from statistics import mean
 from typing import Any
@@ -9,9 +11,9 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CURRENCY_EURO, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import Entity
@@ -20,32 +22,77 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, MODE_THRESHOLD
+from .const import MODE_THRESHOLD
 from .coordinator import SobryDataUpdateCoordinator
 from .entity import SobryPlanEntity
-from .plan import SobryPlan, SobryRuntimeData
+from .plan import SobryConfigEntry, SobryPlan
+from .planner import PriceSlot
 
-# Statistics of the prices of the current day.
-_DAY_STATISTICS = {"min_price": min, "max_price": max, "average_price": mean}
+PRICE_UNIT = f"{CURRENCY_EURO}/kWh"
+
+
+def _slot_price(slot: PriceSlot | None) -> float | None:
+    """Return the price of a slot, if there is one."""
+    return slot.price if slot else None
+
+
+def _day_statistic(
+    statistic: Callable[[list[float]], float],
+) -> Callable[[SobryDataUpdateCoordinator, datetime], float | None]:
+    """Return a statistic of the prices of the current day."""
+
+    def _value(coordinator: SobryDataUpdateCoordinator, now: datetime) -> float | None:
+        prices = [slot.price for slot in coordinator.day_slots(now)]
+        return statistic(prices) if prices else None
+
+    return _value
+
+
+@dataclass(frozen=True, kw_only=True)
+class SobryPriceSensorDescription(SensorEntityDescription):
+    """A price computed from the series, at a given moment."""
+
+    value_fn: Callable[[SobryDataUpdateCoordinator, datetime], float | None]
+
+
+PRICE_SENSORS: tuple[SobryPriceSensorDescription, ...] = (
+    SobryPriceSensorDescription(
+        key="current_price",
+        translation_key="current_price",
+        # Long-term statistics keep the price history past the recorder.
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda coordinator, now: _slot_price(coordinator.slot_at(now)),
+    ),
+    SobryPriceSensorDescription(
+        key="next_price",
+        translation_key="next_price",
+        value_fn=lambda coordinator, now: _slot_price(coordinator.slot_after(now)),
+    ),
+    SobryPriceSensorDescription(
+        key="min_price", translation_key="min_price", value_fn=_day_statistic(min)
+    ),
+    SobryPriceSensorDescription(
+        key="max_price", translation_key="max_price", value_fn=_day_statistic(max)
+    ),
+    SobryPriceSensorDescription(
+        key="average_price",
+        translation_key="average_price",
+        value_fn=_day_statistic(mean),
+    ),
+)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SobryConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Sobry sensor entities."""
-    runtime: SobryRuntimeData = hass.data[DOMAIN][entry.entry_id]
+    runtime = entry.runtime_data
     coordinator = runtime.coordinator
 
     async_add_entities(
-        [
-            SobryPriceSensor(coordinator, entry, "current_price", "Current price"),
-            SobryPriceSensor(coordinator, entry, "next_price", "Next price"),
-            SobryPriceSensor(coordinator, entry, "min_price", "Minimum price"),
-            SobryPriceSensor(coordinator, entry, "max_price", "Maximum price"),
-            SobryPriceSensor(coordinator, entry, "average_price", "Average price"),
-        ]
+        SobryPriceSensor(coordinator, description) for description in PRICE_SENSORS
     )
 
     for plan in runtime.plans:
@@ -62,8 +109,10 @@ async def async_setup_entry(
 class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEntity):
     """Representation of a Sobry price sensor."""
 
-    _attr_native_unit_of_measurement = f"{CURRENCY_EURO}/kWh"
-    _attr_should_poll = False
+    entity_description: SobryPriceSensorDescription
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = PRICE_UNIT
+    _attr_suggested_display_precision = 4
     # Hundreds of entries, over the recorder size limit: kept in the state
     # only, not in the history.
     _unrecorded_attributes = frozenset({"all_prices"})
@@ -71,15 +120,12 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
     def __init__(
         self,
         coordinator: SobryDataUpdateCoordinator,
-        entry: ConfigEntry,
-        key: str,
-        name: str,
+        description: SobryPriceSensorDescription,
     ) -> None:
         super().__init__(coordinator)
-        self._key = key
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_name = f"Sobry {name}"
-        self._attr_has_entity_name = True
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
+        self._attr_device_info = coordinator.device_info
 
     async def async_added_to_hass(self) -> None:
         """Follow the slot boundaries, not only the API refreshes."""
@@ -96,18 +142,18 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
         self.async_write_ha_state()
 
     @property
+    def available(self) -> bool:
+        """Return whether the price is known.
+
+        Day-ahead prices stay right when a refresh fails: the sensor keeps
+        showing them rather than going unavailable on a brief API outage.
+        """
+        return super().available or self.native_value is not None
+
+    @property
     def native_value(self) -> float | None:
         """Return the sensor state, for the slot in force right now."""
-        now = dt_util.utcnow()
-        if self._key == "current_price":
-            slot = self.coordinator.slot_at(now)
-            value = slot.price if slot else None
-        elif self._key == "next_price":
-            slot = self.coordinator.slot_after(now)
-            value = slot.price if slot else None
-        else:
-            prices = [slot.price for slot in self.coordinator.day_slots(now)]
-            value = _DAY_STATISTICS[self._key](prices) if prices else None
+        value = self.entity_description.value_fn(self.coordinator, dt_util.utcnow())
         if value is None:
             return None
         return round(float(value), 6)
@@ -115,7 +161,7 @@ class SobryPriceSensor(CoordinatorEntity[SobryDataUpdateCoordinator], SensorEnti
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return extra state attributes for the primary sensor."""
-        if self._key != "current_price":
+        if self.entity_description.key != "current_price":
             return None
 
         now = dt_util.utcnow()
@@ -184,7 +230,7 @@ class SobryPlanNextEndSensor(SobryPlanSensor):
 class SobryPlanAveragePriceSensor(SobryPlanSensor):
     """Average price of the slots the plan selected."""
 
-    _attr_native_unit_of_measurement = f"{CURRENCY_EURO}/kWh"
+    _attr_native_unit_of_measurement = PRICE_UNIT
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "plan_average_price"
     _attr_suggested_display_precision = 4

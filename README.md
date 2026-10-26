@@ -2,6 +2,10 @@
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=atomtoto&repository=Sobry_HA&category=integration)
 
+[![Tests](https://github.com/atomtoto/Sobry_HA/actions/workflows/tests.yml/badge.svg)](https://github.com/atomtoto/Sobry_HA/actions/workflows/tests.yml)
+[![HACS Validation](https://github.com/atomtoto/Sobry_HA/actions/workflows/hacs-validation.yml/badge.svg)](https://github.com/atomtoto/Sobry_HA/actions/workflows/hacs-validation.yml)
+[![Hassfest Validation](https://github.com/atomtoto/Sobry_HA/actions/workflows/hassfest.yml/badge.svg)](https://github.com/atomtoto/Sobry_HA/actions/workflows/hassfest.yml)
+
 Sobry Energy integration for Home Assistant Community Store (HACS), based on the Sobry V2 API.
 
 ## Features
@@ -9,11 +13,14 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
 - Pulls electricity prices from `https://api.sobry.co/api/prices/raw`
 - Supports Sobry pricing options (`segment`, `turpe`, `profil`, `display`)
 - Supports Sobry API key mode for personalized prices (`/v2/user/daily-prices`)
-- Creates Home Assistant sensors for:
+- Creates Home Assistant sensors, grouped on a *Sobry* device, for:
   - Current price, which changes on every slot boundary, not only when the
-    API is polled
+    API is polled, and keeps long-term statistics
   - Next price
   - Minimum, maximum and average price of the current day
+
+  The prices already published stay shown while a refresh fails, so a short
+  API outage does not make them unavailable.
 - Exposes today's prices, and tomorrow's once published, in the `all_prices`
   attribute of the current price sensor (kept out of the recorder history:
   that list is too large for it)
@@ -24,6 +31,9 @@ Sobry Energy integration for Home Assistant Community Store (HACS), based on the
   a price under which it [always runs](#always-run-below-a-price), a switch to
   [force it on](#forcing-the-appliance-on) by hand, and a fixed-schedule
   [safety net](#safety-net) when prices cannot be fetched
+- Diagnostics to download from the integration page, with the API key
+  redacted, to attach to an issue
+- English and French
 
 ## Installation
 
@@ -203,6 +213,10 @@ The schedule is re-evaluated every minute and on every price refresh, so slots
 are honoured to the minute. On restart, the appliance is put back in the state
 the plan asks for.
 
+An entity to control that is unavailable when it should change, or whose
+call fails, is tried again every minute until it follows the plan. One that
+no longer exists is reported in **Settings** → **Repairs**.
+
 The binary sensor works on its own: leave *Entity to control* empty to keep
 driving your appliance from your own automations.
 
@@ -332,17 +346,24 @@ The integration also supports v2 parameters internally:
 
 Releases are published by the `Release` workflow, in one of two ways:
 
-- push a tag: `git tag v0.6.0 && git push origin v0.6.0`;
+- push a tag: `git tag v1.0.0 && git push origin v1.0.0`;
 - or **Actions** → **Release** → *Run workflow*, with the tag as input — the
   workflow creates the tag on the chosen branch itself.
 
-It runs the planner tests first, refuses to publish when the tag does not match
+It runs the tests first, refuses to publish when the tag does not match
 the `version` of `custom_components/sobry/manifest.json` (so HACS and Home
 Assistant never disagree on the version), and takes the release body from
 `.github/release-notes/<tag>.md` when that file exists, falling back to
 GitHub's generated notes. A markdown heading on the first line of that file
 becomes the release title.
 
-## Links
-HACS Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321499/job/101701623660
-hassfest Validation : https://github.com/atomtoto/Sobry_HACS/actions/runs/34109321473/job/101701623516
+## Development
+
+```sh
+pip install -r requirements_test.txt
+ruff check custom_components tests
+pytest
+```
+
+The tests run on the oldest supported Home Assistant (2025.3) and on the
+release pinned in `requirements_test.txt`.

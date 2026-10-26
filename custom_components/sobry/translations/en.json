@@ -50,7 +50,7 @@
     "abort": {
       "already_configured": "Sobry Energy is already configured.",
       "reauth_successful": "The API key was updated.",
-      "reauth_failed": "The Sobry entry no longer exists."
+      "single_instance_allowed": "Sobry Energy is already configured."
     }
   },
   "options": {
@@ -288,6 +288,21 @@
       }
     },
     "sensor": {
+      "current_price": {
+        "name": "Current price"
+      },
+      "next_price": {
+        "name": "Next price"
+      },
+      "min_price": {
+        "name": "Minimum price"
+      },
+      "max_price": {
+        "name": "Maximum price"
+      },
+      "average_price": {
+        "name": "Average price"
+      },
       "plan_next_start": {
         "name": "Next start"
       },
@@ -376,6 +391,30 @@
     },
     "no_prices": {
       "message": "No Sobry price is available yet."
+    },
+    "cannot_connect": {
+      "message": "Could not reach Sobry: {error}"
+    },
+    "api_error": {
+      "message": "Sobry answered with an error (HTTP {status}): {detail}"
+    },
+    "rate_limited": {
+      "message": "Sobry rate limit reached (HTTP 429), retrying on the next refresh."
+    },
+    "invalid_response": {
+      "message": "Sobry sent an answer that could not be read."
+    },
+    "no_data": {
+      "message": "Sobry returned no usable price."
+    },
+    "invalid_api_key": {
+      "message": "Sobry refused the API key: it was revoked or has expired."
+    }
+  },
+  "issues": {
+    "target_missing": {
+      "title": "Appliance {name}: entity to control not found",
+      "description": "The appliance **{name}** should drive `{entity_id}`, but that entity no longer exists, so it is no longer switched on or off.\n\nRestore the entity, or choose another one with **Reconfigure** on the appliance, under **Settings** → **Devices & services** → **Sobry Energy**. This message goes away by itself once the entity is back."
     }
   }
 }

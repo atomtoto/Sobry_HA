@@ -1,0 +1,3 @@
+# Home Assistant 2026.2.3 and its test harness.
+pytest-homeassistant-custom-component==0.13.316
+ruff==0.17.2

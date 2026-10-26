@@ -50,7 +50,7 @@
     "abort": {
       "already_configured": "Sobry Energy est déjà configuré.",
       "reauth_successful": "La clé API a été mise à jour.",
-      "reauth_failed": "L'entrée Sobry n'existe plus."
+      "single_instance_allowed": "Sobry Energy est déjà configuré."
     }
   },
   "options": {
@@ -288,6 +288,21 @@
       }
     },
     "sensor": {
+      "current_price": {
+        "name": "Prix actuel"
+      },
+      "next_price": {
+        "name": "Prix suivant"
+      },
+      "min_price": {
+        "name": "Prix minimum"
+      },
+      "max_price": {
+        "name": "Prix maximum"
+      },
+      "average_price": {
+        "name": "Prix moyen"
+      },
       "plan_next_start": {
         "name": "Prochain démarrage"
       },
@@ -376,6 +391,30 @@
     },
     "no_prices": {
       "message": "Aucun prix Sobry n'est disponible pour le moment."
+    },
+    "cannot_connect": {
+      "message": "Impossible de joindre Sobry : {error}"
+    },
+    "api_error": {
+      "message": "Sobry a répondu par une erreur (HTTP {status}) : {detail}"
+    },
+    "rate_limited": {
+      "message": "Limite de requêtes Sobry atteinte (HTTP 429), nouvel essai à la prochaine actualisation."
+    },
+    "invalid_response": {
+      "message": "Sobry a envoyé une réponse illisible."
+    },
+    "no_data": {
+      "message": "Sobry n'a renvoyé aucun prix exploitable."
+    },
+    "invalid_api_key": {
+      "message": "Sobry a refusé la clé API : elle a été révoquée ou a expiré."
+    }
+  },
+  "issues": {
+    "target_missing": {
+      "title": "Appareil {name} : entité à piloter introuvable",
+      "description": "L'appareil **{name}** doit piloter `{entity_id}`, mais cette entité n'existe plus : il n'est donc plus allumé ni éteint.\n\nRétablissez l'entité, ou choisissez-en une autre avec **Reconfigurer** sur l'appareil, dans **Paramètres** → **Appareils et services** → **Sobry Energy**. Ce message disparaît de lui-même dès que l'entité est de retour."
     }
   }
 }

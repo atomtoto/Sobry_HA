@@ -380,10 +380,7 @@ class SobryConfigFlow(SobryPriceSteps, ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth_confirm(self, user_input=None):
         """Ask for a new API key, or none to go back to the public prices."""
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        if entry is None:
-            return self.async_abort(reason="reauth_failed")
-
+        entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
             api_key = (user_input.get(CONF_API_KEY) or "").strip()
@@ -405,9 +402,7 @@ class SobryConfigFlow(SobryPriceSteps, ConfigFlow, domain=DOMAIN):
                 # A loaded entry is reloaded by its update listener when it
                 # changes; one that failed to set up has no listener.
                 if not changed or entry.state is not ConfigEntryState.LOADED:
-                    self.hass.async_create_task(
-                        self.hass.config_entries.async_reload(entry.entry_id)
-                    )
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 
         return self.async_show_form(

@@ -6,11 +6,11 @@ its path and can be exercised with ``python3 -m unittest``.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, time, timedelta
 import importlib.util
+from pathlib import Path
 import sys
 import unittest
-from datetime import datetime, time, timedelta, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 _MODULE_PATH = (
@@ -31,7 +31,7 @@ def _series(day: str, prices: list[float], step_minutes: int = 60) -> list[dict]
     return [
         {
             "timestamp": (start + timedelta(minutes=step_minutes * index))
-            .astimezone(timezone.utc)
+            .astimezone(UTC)
             .isoformat(),
             "price": price,
         }
@@ -59,7 +59,7 @@ class TestSlots(unittest.TestCase):
         raw.append(dict(raw[1]))  # duplicated timestamp
         raw.append(
             {
-                "timestamp": _local("2026-01-15T06:00:00").astimezone(timezone.utc).isoformat(),
+                "timestamp": _local("2026-01-15T06:00:00").astimezone(UTC).isoformat(),
                 "price": 4.0,
             }
         )
@@ -261,7 +261,7 @@ class TestPlanning(unittest.TestCase):
 
     def test_short_day_is_complete(self) -> None:
         # 28 March 2027: the clocks go forward, the day lasts 23 hours.
-        start = _local("2027-03-28T00:00:00").astimezone(timezone.utc)
+        start = _local("2027-03-28T00:00:00").astimezone(UTC)
         raw = [
             {"timestamp": (start + timedelta(hours=index)).isoformat(), "price": 0.1}
             for index in range(23)
@@ -275,7 +275,7 @@ class TestPlanning(unittest.TestCase):
     def test_long_day_is_complete(self) -> None:
         # 25 October 2026: the clocks go back, the day lasts 25 hours. It is
         # complete with them all, and without the repeated hour as well.
-        start = _local("2026-10-25T00:00:00").astimezone(timezone.utc)
+        start = _local("2026-10-25T00:00:00").astimezone(UTC)
         for count, skipped in ((25, None), (24, 2)):
             raw = [
                 {"timestamp": (start + timedelta(hours=index)).isoformat(), "price": 0.1}
@@ -289,7 +289,7 @@ class TestPlanning(unittest.TestCase):
 
     def test_overnight_window_across_the_clock_change(self) -> None:
         # 22:00 -> 06:00 on the night the clocks go forward lasts 7 hours.
-        start = _local("2027-03-27T22:00:00").astimezone(timezone.utc)
+        start = _local("2027-03-27T22:00:00").astimezone(UTC)
         raw = [
             {"timestamp": (start + timedelta(hours=index)).isoformat(), "price": 0.1}
             for index in range(7)

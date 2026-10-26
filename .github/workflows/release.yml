@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to create and release, for example v0.6.0"
+        description: "Tag to create and release, for example v1.0.0"
         required: true
         type: string
 
@@ -22,14 +22,16 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Resolve the tag
         id: release
         run: echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
 
-      - name: Run the planner tests
-        run: python -m unittest discover -s tests -v
+      - name: Run the tests
+        run: |
+          pip install -r requirements_test.txt
+          python -m pytest -p no:cacheprovider
 
       - name: Check the tag against manifest.json
         run: |

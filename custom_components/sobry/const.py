@@ -26,8 +26,6 @@ PRICE_SOURCE_PUBLIC_C4 = "public_c4"
 PRICE_SOURCE_API_KEY = "api_key"
 PRICE_SOURCES = [PRICE_SOURCE_PUBLIC_C5, PRICE_SOURCE_PUBLIC_C4, PRICE_SOURCE_API_KEY]
 
-PLATFORMS = ["binary_sensor", "number", "sensor", "switch"]
-
 API_BASE_URL = "https://api.sobry.co"
 
 # --- Device control plans -------------------------------------------------

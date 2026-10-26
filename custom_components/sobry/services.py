@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import time
 from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -31,14 +33,21 @@ from .const import (
     DEFAULT_EXTRA_HOURS,
     DEFAULT_HOURS,
     DOMAIN,
+    MAX_EXTRA_HOURS,
+    MAX_HOURS,
+    MAX_PRICE_LIMIT,
     MODE_CHEAPEST_SLOTS,
     PLAN_MODES,
     SERVICE_GET_CHEAPEST_SLOTS,
 )
-from .plan import SobryRuntimeData, local_timezone, parse_time
+from .plan import SobryConfigEntry, SobryRuntimeData, local_timezone
 from .planner import build_plan
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+
+_PRICE = vol.All(
+    vol.Coerce(float), vol.Range(min=-MAX_PRICE_LIMIT, max=MAX_PRICE_LIMIT)
+)
 
 GET_CHEAPEST_SLOTS_SCHEMA = vol.Schema(
     {
@@ -46,13 +55,17 @@ GET_CHEAPEST_SLOTS_SCHEMA = vol.Schema(
             {"integration": DOMAIN}
         ),
         vol.Optional(CONF_MODE, default=MODE_CHEAPEST_SLOTS): vol.In(PLAN_MODES),
-        vol.Optional(CONF_HOURS, default=DEFAULT_HOURS): vol.Coerce(float),
-        vol.Optional(CONF_EXTRA_HOURS, default=DEFAULT_EXTRA_HOURS): vol.Coerce(float),
-        vol.Optional(CONF_WINDOW_START): cv.time,
-        vol.Optional(CONF_WINDOW_END): cv.time,
-        vol.Optional(CONF_MAX_PRICE): vol.Coerce(float),
-        vol.Optional(CONF_THRESHOLD_PRICE): vol.Coerce(float),
-        vol.Optional(CONF_FORCE_PRICE): vol.Coerce(float),
+        vol.Optional(CONF_HOURS, default=DEFAULT_HOURS): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=MAX_HOURS)
+        ),
+        vol.Optional(CONF_EXTRA_HOURS, default=DEFAULT_EXTRA_HOURS): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=MAX_EXTRA_HOURS)
+        ),
+        vol.Optional(CONF_WINDOW_START, default=time(0)): cv.time,
+        vol.Optional(CONF_WINDOW_END, default=time(0)): cv.time,
+        vol.Optional(CONF_MAX_PRICE): _PRICE,
+        vol.Optional(CONF_THRESHOLD_PRICE): _PRICE,
+        vol.Optional(CONF_FORCE_PRICE): _PRICE,
         vol.Optional(CONF_FORCE_SKIP_NEGATIVE, default=False): cv.boolean,
         vol.Optional(CONF_REQUIRE_COMPLETE_DATA, default=False): cv.boolean,
     }
@@ -61,28 +74,26 @@ GET_CHEAPEST_SLOTS_SCHEMA = vol.Schema(
 
 def _runtime(hass: HomeAssistant, entry_id: str | None) -> SobryRuntimeData:
     """Return the runtime of the requested (or only) Sobry config entry."""
-    entries: dict[str, SobryRuntimeData] = hass.data.get(DOMAIN, {})
-    if entry_id is not None:
-        runtime = entries.get(entry_id)
-        if runtime is None:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="entry_not_loaded",
-            )
-        return runtime
-    if not entries:
+    entry: SobryConfigEntry | None
+    if entry_id is None:
+        entry = next(iter(hass.config_entries.async_loaded_entries(DOMAIN)), None)
+    else:
+        entry = hass.config_entries.async_get_entry(entry_id)
+    if (
+        entry is None
+        or entry.domain != DOMAIN
+        or entry.state is not ConfigEntryState.LOADED
+    ):
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="entry_not_loaded",
         )
-    return next(iter(entries.values()))
+    return entry.runtime_data
 
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the Sobry services, once for the whole integration."""
-    if hass.services.has_service(DOMAIN, SERVICE_GET_CHEAPEST_SLOTS):
-        return
 
     async def async_get_cheapest_slots(call: ServiceCall) -> ServiceResponse:
         """Return the cheapest slots for the requested plan definition."""
@@ -94,8 +105,6 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 translation_key="no_prices",
             )
 
-        window_start = call.data.get(CONF_WINDOW_START) or parse_time(None, "00:00:00")
-        window_end = call.data.get(CONF_WINDOW_END) or parse_time(None, "00:00:00")
         tz = local_timezone()
         now = dt_util.utcnow()
 
@@ -105,8 +114,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
             tz,
             mode=call.data[CONF_MODE],
             hours=call.data[CONF_HOURS],
-            window_start=window_start,
-            window_end=window_end,
+            window_start=call.data[CONF_WINDOW_START],
+            window_end=call.data[CONF_WINDOW_END],
             max_price=call.data.get(CONF_MAX_PRICE),
             threshold_price=call.data.get(CONF_THRESHOLD_PRICE),
             extra_hours=call.data[CONF_EXTRA_HOURS],
@@ -144,8 +153,3 @@ def async_setup_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.ONLY,
     )
 
-
-@callback
-def async_unload_services(hass: HomeAssistant) -> None:
-    """Remove the Sobry services when the last entry is unloaded."""
-    hass.services.async_remove(DOMAIN, SERVICE_GET_CHEAPEST_SLOTS)

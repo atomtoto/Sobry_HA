@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta, timezone, tzinfo
+from datetime import UTC, datetime, time, timedelta, tzinfo
 from typing import Any
 
 DEFAULT_SLOT_DURATION = timedelta(minutes=15)
@@ -53,8 +53,8 @@ def entry_start(item: Any) -> datetime | None:
     except (TypeError, ValueError):
         return None
     if start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    return start.astimezone(timezone.utc)
+        start = start.replace(tzinfo=UTC)
+    return start.astimezone(UTC)
 
 
 def merge_price_entries(
@@ -564,7 +564,7 @@ def _plan_period(
     # A period losing an hour to daylight saving time is complete with one
     # hour less. One gaining an hour is accepted without it: a source giving
     # local times only cannot tell the repeated hour apart.
-    elapsed = period_end.astimezone(timezone.utc) - period_start.astimezone(timezone.utc)
+    elapsed = period_end.astimezone(UTC) - period_start.astimezone(UTC)
     wall_clock = period_end.replace(tzinfo=None) - period_start.replace(tzinfo=None)
     data_complete = covered >= min(elapsed, wall_clock) - _TOLERANCE
 

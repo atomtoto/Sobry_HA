@@ -1,0 +1,68 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "plan_fallback": {
+        "default": "mdi:calendar-check",
+        "state": {
+          "on": "mdi:calendar-alert"
+        }
+      }
+    },
+    "number": {
+      "plan_hours": {
+        "default": "mdi:timer-cog-outline"
+      },
+      "plan_threshold_price": {
+        "default": "mdi:cash-lock"
+      }
+    },
+    "sensor": {
+      "current_price": {
+        "default": "mdi:currency-eur"
+      },
+      "next_price": {
+        "default": "mdi:skip-next-circle-outline"
+      },
+      "min_price": {
+        "default": "mdi:arrow-collapse-down"
+      },
+      "max_price": {
+        "default": "mdi:arrow-collapse-up"
+      },
+      "average_price": {
+        "default": "mdi:approximately-equal"
+      },
+      "plan_next_start": {
+        "default": "mdi:clock-start"
+      },
+      "plan_next_end": {
+        "default": "mdi:clock-end"
+      },
+      "plan_average_price": {
+        "default": "mdi:cash"
+      },
+      "plan_runtime": {
+        "default": "mdi:timer-outline"
+      }
+    },
+    "switch": {
+      "plan_control": {
+        "default": "mdi:robot",
+        "state": {
+          "off": "mdi:robot-off"
+        }
+      },
+      "plan_boost": {
+        "default": "mdi:flash-outline",
+        "state": {
+          "on": "mdi:flash"
+        }
+      }
+    }
+  },
+  "services": {
+    "get_cheapest_slots": {
+      "service": "mdi:cash-clock"
+    }
+  }
+}
