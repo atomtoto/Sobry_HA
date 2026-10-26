@@ -5,7 +5,13 @@
         "title": "Sobry Energy",
         "description": "Configurez les prix de l'électricité Sobry V2.",
         "data": {
-          "segment": "Segment",
+          "segment": "Segment du contrat"
+        }
+      },
+      "user_details": {
+        "title": "Sobry Energy",
+        "description": "Choisissez les paramètres tarifaires de ce segment de contrat.",
+        "data": {
           "turpe": "Option TURPE",
           "profil": "Profil",
           "display": "Affichage",
@@ -44,7 +50,13 @@
       "settings": {
         "title": "Paramètres tarifaires",
         "data": {
-          "segment": "Segment",
+          "segment": "Segment du contrat"
+        }
+      },
+      "settings_details": {
+        "title": "Paramètres tarifaires",
+        "description": "Seuls les réglages applicables au segment de contrat sélectionné sont affichés.",
+        "data": {
           "turpe": "Option TURPE",
           "profil": "Profil",
           "display": "Affichage",
@@ -142,6 +154,59 @@
           "fallback_start": "Horaires fixes utilisés dès que le plan ne peut pas décider : API injoignable, prix non publiés, ou plage qu'il n'a pas pu remplir. Laissez les deux champs vides pour désactiver le repli.",
           "fallback_end": "Fin des horaires fixes de repli. Une fin antérieure au début correspond à une plage de nuit.",
           "require_complete_data": "Laisse l'appareil à l'arrêt tant que tous les prix de la plage ne sont pas publiés, pour ne pas manquer les créneaux les moins chers."
+        }
+      },
+      "plan_pricing": {
+        "title": "Règles de prix",
+        "description": "Choisissez les limites de prix de l'appareil. Seuls les réglages applicables au mode sélectionné sont affichés.",
+        "data": {
+          "max_price": "Prix maximum",
+          "threshold_price": "Prix seuil",
+          "force_price": "Toujours lancer sous ce prix"
+        },
+        "data_description": {
+          "max_price": "Aucun créneau au-dessus de ce prix n'est retenu. Laissez vide pour toujours programmer la durée demandée.",
+          "threshold_price": "Les créneaux dont le prix est inférieur ou égal à cette valeur sont retenus. Utilisé uniquement par le mode seuil.",
+          "force_price": "Facultatif. Fonctionne aussi pendant chaque créneau dont le prix est inférieur ou égal à cette valeur, quels que soient le mode, la plage ou la durée."
+        }
+      },
+      "plan_force": {
+        "title": "Exception de prix forcé",
+        "description": "Cette règle lance l'appareil chaque fois que le prix est assez bas, en plus de la programmation sélectionnée.",
+        "data": {
+          "force_skip_negative": "Ignorer cette règle les jours à prix négatif"
+        },
+        "data_description": {
+          "force_skip_negative": "Les jours à prix négatif, seuls les créneaux retenus par le plan fonctionnent."
+        }
+      },
+      "plan_power": {
+        "title": "Prolongation selon la puissance",
+        "description": "Maintenez éventuellement l'appareil en marche tant que son capteur de puissance indique qu'il chauffe ou consomme encore.",
+        "data": {
+          "power_entity": "Entité de puissance"
+        },
+        "data_description": {
+          "power_entity": "Laissez vide pour désactiver la prolongation selon la puissance."
+        }
+      },
+      "plan_power_settings": {
+        "title": "Limites de la prolongation",
+        "data": {
+          "power_threshold": "Puissance au-delà de laquelle l'appareil continue",
+          "power_hold_max": "Prolongation maximale"
+        },
+        "data_description": {
+          "power_threshold": "Consommation en dessous de laquelle l'appareil est considéré comme terminé, en watts.",
+          "power_hold_max": "La prolongation ne dépasse jamais cette durée après la dernière plage planifiée."
+        }
+      },
+      "plan_fallback": {
+        "title": "Horaires de repli",
+        "description": "Utilisez éventuellement des horaires fixes lorsque les prix sont indisponibles ou que le plan ne peut pas remplir sa plage. Laissez les deux champs vides pour désactiver le repli.",
+        "data": {
+          "fallback_start": "Début du repli",
+          "fallback_end": "Fin du repli"
         }
       },
       "monthly_hours": {
